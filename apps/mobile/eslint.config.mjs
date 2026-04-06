@@ -38,6 +38,7 @@ export default [
       'no-multi-spaces': ['error', { exceptions: { VariableDeclarator: true } }],
       'no-floating-decimal': 'off',
       'space-before-function-paren': ['error', 'always'],
+      'import/no-unresolved': ['error', { ignore: ['^expo-notifications$', '^expo-device$'] }],
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
   },
