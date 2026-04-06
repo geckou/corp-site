@@ -1,15 +1,20 @@
 import type { Metadata } from 'next'
-
-import { AuthProvider } from '@/components/auth/AuthProvider'
-import {
-  GoogleTagManager,
-  GoogleTagManagerNoscript,
-} from '@/components/GoogleTagManager'
 import '@/styles/globals.css'
 
 export const metadata: Metadata = {
-  title: 'Geckou App',
-  description: 'Built by 合同会社Geckou',
+  title: '合同会社Geckou',
+  description: 'デザインから開発まで一貫して行なっています。',
+  openGraph: {
+    title: '合同会社Geckou',
+    description: 'デザインから開発まで一貫して行なっています。',
+    images: ['/ogp.png'],
+    locale: 'ja_JP',
+    type: 'website',
+  },
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export default function RootLayout({
@@ -19,13 +24,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <head>
-        <GoogleTagManager />
-      </head>
-      <body>
-        <GoogleTagManagerNoscript />
-        <AuthProvider>{children}</AuthProvider>
-      </body>
+      <body>{children}</body>
     </html>
   )
 }

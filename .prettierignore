@@ -6,3 +6,5 @@ dist
 coverage
 .turbo
 *.md
+# FlatCompat が生成する一時ファイル
+apps/mobile/.eslintrc.js
