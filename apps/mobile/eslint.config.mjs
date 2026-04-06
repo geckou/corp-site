@@ -1,4 +1,6 @@
 import { FlatCompat } from '@eslint/eslintrc'
+import typescriptEslint from '@typescript-eslint/eslint-plugin'
+import tsParser from '@typescript-eslint/parser'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -6,16 +8,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const compat = new FlatCompat({ baseDirectory: __dirname })
 
 export default [
-  ...compat.config({
-    root: true,
-    extends: ['expo', 'prettier'],
-    parserOptions: {
-      parser: '@typescript-eslint/parser',
+  ...compat.extends('expo', 'prettier'),
+  {
+    plugins: {
+      '@typescript-eslint': typescriptEslint,
+    },
+    languageOptions: {
+      parser: tsParser,
       ecmaVersion: 2020,
       sourceType: 'module',
-      ecmaFeatures: {
-        impliedStrict: true,
-        jsx: true,
+      parserOptions: {
+        ecmaFeatures: {
+          impliedStrict: true,
+          jsx: true,
+        },
       },
     },
     rules: {
@@ -43,5 +49,5 @@ export default [
         },
       ],
     },
-  }),
+  },
 ]
