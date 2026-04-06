@@ -14,21 +14,21 @@ export default [
       '@typescript-eslint': typescriptEslint,
     },
     languageOptions: {
-      parser: tsParser,
-      ecmaVersion: 2020,
-      sourceType: 'module',
+      parser       : tsParser,
+      ecmaVersion  : 2020,
+      sourceType   : 'module',
       parserOptions: {
         ecmaFeatures: {
           impliedStrict: true,
-          jsx: true,
+          jsx          : true,
         },
       },
     },
     rules: {
-      'arrow-parens': ['error', 'as-needed'],
-      curly: ['error', 'multi-line'],
-      'comma-dangle': ['error', 'always-multiline'],
-      'key-spacing': [
+      'arrow-parens'                    : ['error', 'as-needed'],
+      curly                             : ['error', 'multi-line'],
+      'comma-dangle'                    : ['error', 'always-multiline'],
+      'key-spacing'                     : [
         'error',
         {
           align: 'colon',
@@ -40,8 +40,8 @@ export default [
           exceptions: { VariableDeclarator: true },
         },
       ],
-      'no-floating-decimal': 'off',
-      'space-before-function-paren': ['error', 'always'],
+      'no-floating-decimal'             : 'off',
+      'space-before-function-paren'     : ['error', 'always'],
       '@typescript-eslint/no-unused-vars': [
         'warn',
         {
