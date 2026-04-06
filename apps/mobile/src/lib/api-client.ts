@@ -18,7 +18,7 @@ type ApiResponse<T> = {
 /**
  * Cloud Functions API を呼び出す共通ヘルパー
  */
-export async function apiClient<T>(
+export async function apiClient<T> (
   path: string,
   options: ApiOptions = {}
 ): Promise<ApiResponse<T>> {
