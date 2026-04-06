@@ -1,4 +1,5 @@
-import { auth } from '@/lib/firebase'
+// TODO: Firebase Auth 連携を実装する（@geckou/shared 導入後）
+// 現在コーポレートサイトでは未使用
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001'
@@ -22,19 +23,10 @@ export async function apiClient<T> (
   path: string,
   options: ApiOptions = {},
 ): Promise<ApiResponse<T>> {
-  const { method = 'GET', body, authenticated = true } = options
+  const { method = 'GET', body } = options
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-  }
-
-  if (authenticated) {
-    const user = auth.currentUser
-
-    if (user) {
-      const token = await user.getIdToken()
-      headers['Authorization'] = `Bearer ${token}`
-    }
   }
 
   try {
