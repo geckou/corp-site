@@ -9,19 +9,32 @@ import { useMediaDevice } from '@/hooks/use-media-device'
 
 type ServicesOneChatProps = {
   isActivated: boolean
-  heading : string
+  heading: string
 }
 
-export const ServicesOneChat = ({ isActivated, heading }: ServicesOneChatProps) => {
-  const currentSection = useCurrentSection(s => s.currentSection)
+export const ServicesOneChat = ({
+  isActivated,
+  heading,
+}: ServicesOneChatProps) => {
+  const currentSection = useCurrentSection((s) => s.currentSection)
   const mediaDevice = useMediaDevice()
   const isShownHeading = currentSection.split('_')[0] === 'services'
 
-  const angleValues = mediaDevice === 'mobile'
-    ? { left: { angleValue: -40, topEdgeWidth: 500 }, right: { angleValue: 5, topEdgeWidth: 120 } }
-    : { left: { angleValue: -60, topEdgeWidth: 1000 }, right: { angleValue: 20, topEdgeWidth: 500 } }
+  const angleValues =
+    mediaDevice === 'mobile'
+      ? {
+          left: { angleValue: -40, topEdgeWidth: 500 },
+          right: { angleValue: 5, topEdgeWidth: 120 },
+        }
+      : {
+          left: { angleValue: -60, topEdgeWidth: 1000 },
+          right: { angleValue: 20, topEdgeWidth: 500 },
+        }
 
-  const bgImageSrc = mediaDevice === 'mobile' ? '/images/one_chat_mobile.webp' : '/images/one_chat.webp'
+  const bgImageSrc =
+    mediaDevice === 'mobile'
+      ? '/images/one_chat_mobile.webp'
+      : '/images/one_chat.webp'
 
   return (
     <SectionContainer className="services-onechat-container">
@@ -43,10 +56,17 @@ export const ServicesOneChat = ({ isActivated, heading }: ServicesOneChatProps) 
         heading={<>CHAT APPLICATION</>}
         description={
           <>
-            <span>ワンチャットは、当社が開発した匿名で利用できるチャットアプリです。</span>
-            <span>アカウント登録なしで、そのまま会話を始められる手軽さが特長です。</span>
+            <span>
+              ワンチャットは、当社が開発した匿名で利用できるチャットアプリです。
+            </span>
+            <span>
+              アカウント登録なしで、そのまま会話を始められる手軽さが特長です。
+            </span>
             <span>会話のログは残らないため、安心してご利用いただけます。</span>
-            <span>柔らかな印象のデザインを採用し、Nuxt・Firebase・Capacitor により快適に動作するよう設計されています。</span>
+            <span>
+              柔らかな印象のデザインを採用し、Nuxt・Firebase・Capacitor
+              により快適に動作するよう設計されています。
+            </span>
           </>
         }
       />

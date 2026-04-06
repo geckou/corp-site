@@ -5,11 +5,11 @@ import type { NextRequest } from 'next/server'
 // 認証が必要なパス
 const PROTECTED_PATHS = ['/dashboard']
 
-export function middleware (request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // 保護されたパスかチェック
-  const isProtected = PROTECTED_PATHS.some(path => pathname.startsWith(path))
+  const isProtected = PROTECTED_PATHS.some((path) => pathname.startsWith(path))
 
   if (!isProtected) return NextResponse.next()
 

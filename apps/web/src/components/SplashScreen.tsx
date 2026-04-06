@@ -26,7 +26,11 @@ export const SplashScreen = () => {
     <div className={`splash-screen ${fadeOut ? 'fade-out' : ''}`}>
       <div
         className="splash-logo"
-        style={{ '--animation-duration': `${DISPLAY_DURATION}ms` } as React.CSSProperties}
+        style={
+          {
+            '--animation-duration': `${DISPLAY_DURATION}ms`,
+          } as React.CSSProperties
+        }
       >
         <LogoSymbol variant="white" />
         <LogoText className="splash-logo-text" variant="white" />

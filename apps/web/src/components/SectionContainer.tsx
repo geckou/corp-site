@@ -6,14 +6,18 @@ type SectionContainerProps = {
   'data-section-id'?: string
 }
 
-export const SectionContainer = ({ children, className, 'data-section-id': dataSectionId }: SectionContainerProps) => (
+export const SectionContainer = ({
+  children,
+  className,
+  'data-section-id': dataSectionId,
+}: SectionContainerProps) => (
   <section
     className={className}
     data-section-id={dataSectionId}
     style={{
       inlineSize: '100%',
-      blockSize : '100svh',
-      position  : 'relative',
+      blockSize: '100svh',
+      position: 'relative',
     }}
   >
     {children}

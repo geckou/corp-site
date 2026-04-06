@@ -12,7 +12,10 @@ type GlobalNavProps = {
 
 export const GlobalNav = ({ onScrollTo }: GlobalNavProps) => {
   const [isOpenedNav, setIsOpenedNav] = useState(false)
-  const filteredSections = useMemo(() => sections.filter(s => s.isShownOnNav), [])
+  const filteredSections = useMemo(
+    () => sections.filter((s) => s.isShownOnNav),
+    []
+  )
 
   const scrollToSection = (sectionId: string) => {
     onScrollTo(sectionId)
@@ -26,7 +29,9 @@ export const GlobalNav = ({ onScrollTo }: GlobalNavProps) => {
         onClick={() => setIsOpenedNav(!isOpenedNav)}
       />
       <div className="global-nav-light-wrap">
-        <LightIcon className={`global-nav-light ${isOpenedNav ? 'open' : ''}`} />
+        <LightIcon
+          className={`global-nav-light ${isOpenedNav ? 'open' : ''}`}
+        />
       </div>
       <nav className={`global-nav ${isOpenedNav ? 'open' : ''}`}>
         <button
@@ -37,7 +42,7 @@ export const GlobalNav = ({ onScrollTo }: GlobalNavProps) => {
         >
           <span>TOP</span>
         </button>
-        {filteredSections.map(section => (
+        {filteredSections.map((section) => (
           <button
             key={section.id}
             className="global-nav-link"

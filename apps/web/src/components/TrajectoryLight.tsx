@@ -8,7 +8,7 @@ type TrajectoryLightProps = {
 
 export const TrajectoryLight = ({ isActivated }: TrajectoryLightProps) => (
   <SectionContainer className="trajectory-container">
-    {[0, 1, 2].map(i => (
+    {[0, 1, 2].map((i) => (
       <div
         key={i}
         className={`trajectory-mask-wrap ${isActivated ? 'active' : 'hidden'}`}

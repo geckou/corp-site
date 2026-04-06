@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 
 type LinkButtonProps = {
-  url : string
-  children : ReactNode
+  url: string
+  children: ReactNode
   className?: string
 }
 

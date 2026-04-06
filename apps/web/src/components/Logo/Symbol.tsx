@@ -3,12 +3,16 @@ type LogoSymbolProps = {
   className?: string
 }
 
-export const LogoSymbol = ({ variant = 'normal', className }: LogoSymbolProps) => {
-  const colorVar = variant === 'white'
-    ? 'var(--white)'
-    : variant === 'black'
-      ? 'var(--corp-black)'
-      : 'var(--corp-color)'
+export const LogoSymbol = ({
+  variant = 'normal',
+  className,
+}: LogoSymbolProps) => {
+  const colorVar =
+    variant === 'white'
+      ? 'var(--white)'
+      : variant === 'black'
+        ? 'var(--corp-black)'
+        : 'var(--corp-color)'
 
   return (
     <svg

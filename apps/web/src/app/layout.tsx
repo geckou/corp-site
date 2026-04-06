@@ -2,22 +2,22 @@ import type { Metadata } from 'next'
 import '@/styles/globals.css'
 
 export const metadata: Metadata = {
-  title      : '合同会社Geckou',
+  title: '合同会社Geckou',
   description: 'デザインから開発まで一貫して行なっています。',
-  openGraph  : {
-    title      : '合同会社Geckou',
+  openGraph: {
+    title: '合同会社Geckou',
     description: 'デザインから開発まで一貫して行なっています。',
-    images     : ['/ogp.png'],
-    locale     : 'ja_JP',
-    type       : 'website',
+    images: ['/ogp.png'],
+    locale: 'ja_JP',
+    type: 'website',
   },
   icons: {
-    icon : '/favicon.svg',
+    icon: '/favicon.svg',
     apple: '/apple-touch-icon.png',
   },
 }
 
-export default function RootLayout ({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode

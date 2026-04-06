@@ -20,15 +20,21 @@ export const StarrySky = () => {
     resize()
     window.addEventListener('resize', resize)
 
-    const stars: { x: number; y: number; size: number; opacity: number; speed: number }[] = []
+    const stars: {
+      x: number
+      y: number
+      size: number
+      opacity: number
+      speed: number
+    }[] = []
 
     for (let i = 0; i < 20; i++) {
       stars.push({
-        x      : Math.random() * canvas.width,
-        y      : Math.random() * canvas.height,
-        size   : Math.random() * 2 + 0.5,
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2 + 0.5,
         opacity: Math.random() * 0.6 + 0.2,
-        speed  : Math.random() * 0.3 + 0.1,
+        speed: Math.random() * 0.3 + 0.1,
       })
     }
 
@@ -37,7 +43,7 @@ export const StarrySky = () => {
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-      stars.forEach(star => {
+      stars.forEach((star) => {
         star.opacity += (Math.random() - 0.5) * star.speed * 0.1
         star.opacity = Math.max(0.2, Math.min(0.8, star.opacity))
 
@@ -62,11 +68,11 @@ export const StarrySky = () => {
     <canvas
       ref={canvasRef}
       style={{
-        inlineSize   : '100%',
-        blockSize    : '100%',
-        position     : 'absolute',
-        top          : 0,
-        left         : 0,
+        inlineSize: '100%',
+        blockSize: '100%',
+        position: 'absolute',
+        top: 0,
+        left: 0,
         pointerEvents: 'none',
       }}
     />

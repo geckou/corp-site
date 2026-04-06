@@ -1,7 +1,7 @@
 // 参考実装: ログインページ
 // TODO: firebase 導入後に有効化する
 
-export default function LoginPage () {
+export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="w-full max-w-sm space-y-4">

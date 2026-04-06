@@ -8,7 +8,7 @@ import { SectionHeading } from '@/components/SectionHeading'
 
 type ContactProps = {
   isActivated: boolean
-  heading : string
+  heading: string
 }
 
 export const Contact = ({ isActivated, heading }: ContactProps) => {
@@ -21,7 +21,9 @@ export const Contact = ({ isActivated, heading }: ContactProps) => {
   return (
     <SectionContainer className="contact-container">
       <ContactForm isActive={isActivated} />
-      <div className={`contact-copyright ${isActivated ? 'active' : ''} ${isHidden ? 'hidden' : ''}`}>
+      <div
+        className={`contact-copyright ${isActivated ? 'active' : ''} ${isHidden ? 'hidden' : ''}`}
+      >
         <small>© Geckou LLC</small>
       </div>
       <SectionHeading heading={heading} isShown={isActivated} />

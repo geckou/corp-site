@@ -4,9 +4,9 @@ import { LinkButton } from '@/components/LinkButton'
 
 type ServiceItemProps = {
   headingAlign?: 'left' | 'right'
-  linkButton? : { text: string; url: string } | null
-  heading : ReactNode
-  description : ReactNode
+  linkButton?: { text: string; url: string } | null
+  heading: ReactNode
+  description: ReactNode
 }
 
 export const ServiceItem = ({
@@ -18,25 +18,24 @@ export const ServiceItem = ({
   <div style={{ zIndex: 'var(--z-index-contents)' }}>
     <h3
       className="service-item-heading"
-      style={{
-        '--heading-align': headingAlign,
-        marginBlockEnd   : 'var(--sp-large)',
-        paddingInline    : 'var(--sp-large)',
-        fontSize         : 'var(--fs-service-heading)',
-        textShadow       : '0 var(--sp-small) 0 var(--main-color)',
-        textAlign        : headingAlign,
-        lineHeight       : 'var(--line-height-tight)',
-      } as React.CSSProperties}
+      style={
+        {
+          '--heading-align': headingAlign,
+          marginBlockEnd: 'var(--sp-large)',
+          paddingInline: 'var(--sp-large)',
+          fontSize: 'var(--fs-service-heading)',
+          textShadow: '0 var(--sp-small) 0 var(--main-color)',
+          textAlign: headingAlign,
+          lineHeight: 'var(--line-height-tight)',
+        } as React.CSSProperties
+      }
     >
       {heading}
     </h3>
     <div className="service-item-description">
       <p style={{ position: 'relative' }}>{description}</p>
       {linkButton && (
-        <LinkButton
-          url={linkButton.url}
-          className="service-item-link"
-        >
+        <LinkButton url={linkButton.url} className="service-item-link">
           {linkButton.text}
         </LinkButton>
       )}

@@ -17,7 +17,10 @@ import { useCurrentSection } from '@/hooks/use-current-section'
 import { sections } from '@/lib/constants/sections'
 import type { SectionId } from '@/lib/constants/sections'
 
-const SECTION_COMPONENTS: Record<string, React.ComponentType<{ isActivated: boolean; heading: string }>> = {
+const SECTION_COMPONENTS: Record<
+  string,
+  React.ComponentType<{ isActivated: boolean; heading: string }>
+> = {
   About,
   ServicesDevelopment,
   ServicesOneChat,
@@ -28,7 +31,7 @@ const SECTION_COMPONENTS: Record<string, React.ComponentType<{ isActivated: bool
 const SCROLL_SPEED_MULTIPLIER = 0.3
 const DEBOUNCE_TIME = 100
 
-export default function Home () {
+export default function Home() {
   const { currentSection, updateCurrentSection } = useCurrentSection()
   const containerRef = useRef<HTMLDivElement>(null)
   const sectionAreaRef = useRef<HTMLDivElement>(null)
@@ -66,11 +69,14 @@ export default function Home () {
       isInSectionAreaRef.current = true
       container.scrollTo({ top: windowHeight, behavior: 'smooth' })
 
-      const targetElement = document.querySelectorAll(`[data-section-id=${sectionId}]`)[0]
+      const targetElement = document.querySelectorAll(
+        `[data-section-id=${sectionId}]`
+      )[0]
       if (targetElement && sectionArea) {
         const sectionAreaRect = sectionArea.getBoundingClientRect()
         const targetRect = targetElement.getBoundingClientRect()
-        const sectionTop = targetRect.top - sectionAreaRect.top + sectionArea.scrollTop
+        const sectionTop =
+          targetRect.top - sectionAreaRect.top + sectionArea.scrollTop
         sectionArea.scrollTo({ top: sectionTop, behavior: 'smooth' })
         sectionAreaScrollYRef.current = sectionTop
       }
@@ -85,9 +91,11 @@ export default function Home () {
     const windowHeight = window.innerHeight
 
     const observerCallback = (entries: IntersectionObserverEntry[]) => {
-      entries.forEach(entry => {
+      entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          const sectionId = entry.target.getAttribute('data-section-id') as SectionId
+          const sectionId = entry.target.getAttribute(
+            'data-section-id'
+          ) as SectionId
           updateCurrentSection(sectionId)
           currentSectionElementRef.current = entry.target
         } else {
@@ -97,14 +105,14 @@ export default function Home () {
     }
 
     const observer = new IntersectionObserver(observerCallback, {
-      root      : null,
+      root: null,
       rootMargin: '0px',
-      threshold : 0.8,
+      threshold: 0.8,
     })
 
     const sectionElements = document.querySelectorAll('[data-section-id]')
     let totalHeight = 0
-    sectionElements.forEach(el => {
+    sectionElements.forEach((el) => {
       observer.observe(el)
       const id = el.getAttribute('data-section-id')
       if (id !== 'logo' && id !== 'about') totalHeight += el.clientHeight
@@ -124,7 +132,10 @@ export default function Home () {
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
       scrollTimeoutRef.current = window.setTimeout(() => {
         if (currentSectionElementRef.current) {
-          currentSectionElementRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          currentSectionElementRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          })
         }
       }, DEBOUNCE_TIME)
     }
@@ -177,12 +188,9 @@ export default function Home () {
         className="main-background"
         scrollPercentage={scrollPercentage}
       />
-      <LogoArea
-        data-section-id="logo"
-        onScrollTo={scrollToSection}
-      />
+      <LogoArea data-section-id="logo" onScrollTo={scrollToSection} />
       <div ref={sectionAreaRef} className="section-area">
-        {sections.map(section => {
+        {sections.map((section) => {
           const Component = SECTION_COMPONENTS[section.component]
           return Component ? (
             <div key={section.id} data-section-id={section.id}>

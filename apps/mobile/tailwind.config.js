@@ -4,7 +4,7 @@ const { colors, fontFamily, borderRadius } = require('@geckou/shared/theme')
 module.exports = {
   content: ['./src/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
-  theme  : {
+  theme: {
     extend: {
       colors,
       fontFamily,

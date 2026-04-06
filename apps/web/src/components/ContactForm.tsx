@@ -18,7 +18,7 @@ export const ContactForm = ({ isActive }: ContactFormProps) => {
   const isAllFilled = Object.values(values).every(Boolean)
 
   const handleChange = (key: keyof typeof values, value: string) => {
-    setValues(prev => ({ ...prev, [key]: value }))
+    setValues((prev) => ({ ...prev, [key]: value }))
   }
 
   return (
@@ -31,10 +31,12 @@ export const ContactForm = ({ isActive }: ContactFormProps) => {
         <fieldset
           key={item.key}
           className={`contact-fieldset ${isActive ? 'active' : ''}`}
-          style={{
-            '--field-index': index,
-            transitionDelay: `${index * 0.1}s`,
-          } as React.CSSProperties}
+          style={
+            {
+              '--field-index': index,
+              transitionDelay: `${index * 0.1}s`,
+            } as React.CSSProperties
+          }
         >
           {item.type !== 'textarea' ? (
             <input
@@ -46,7 +48,7 @@ export const ContactForm = ({ isActive }: ContactFormProps) => {
               autoComplete="off"
               className="contact-text-box"
               value={values[item.key]}
-              onChange={e => handleChange(item.key, e.target.value)}
+              onChange={(e) => handleChange(item.key, e.target.value)}
             />
           ) : (
             <textarea
@@ -57,11 +59,15 @@ export const ContactForm = ({ isActive }: ContactFormProps) => {
               autoComplete="off"
               className="contact-textarea"
               value={values[item.key]}
-              onChange={e => handleChange(item.key, e.target.value)}
+              onChange={(e) => handleChange(item.key, e.target.value)}
             />
           )}
           <label
-            htmlFor={item.type !== 'textarea' ? `input-${item.key}` : `textarea-${item.key}`}
+            htmlFor={
+              item.type !== 'textarea'
+                ? `input-${item.key}`
+                : `textarea-${item.key}`
+            }
             className="contact-legend"
           >
             {item.label}

@@ -12,7 +12,7 @@ export type TopBackgroundRef = {
 
 type TopBackgroundProps = {
   scrollPercentage: number
-  className? : string
+  className?: string
 }
 
 export const TopBackground = forwardRef<TopBackgroundRef, TopBackgroundProps>(
@@ -27,20 +27,35 @@ export const TopBackground = forwardRef<TopBackgroundRef, TopBackgroundProps>(
       <div
         className={className}
         style={{
-          inlineSize   : '100%',
-          blockSize    : '100svh',
+          inlineSize: '100%',
+          blockSize: '100svh',
           pointerEvents: 'none',
         }}
       >
-        <div style={{ position: 'absolute', inset: 0, zIndex: 'var(--z-index-bg)' }}>
-          <GradientBackground ref={gradientRef} scrollPercentage={scrollPercentage} />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 'var(--z-index-bg)',
+          }}
+        >
+          <GradientBackground
+            ref={gradientRef}
+            scrollPercentage={scrollPercentage}
+          />
         </div>
-        <div style={{ position: 'absolute', inset: 0, zIndex: 'var(--z-index-bg)' }}>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 'var(--z-index-bg)',
+          }}
+        >
           <StarrySky />
         </div>
       </div>
     )
-  },
+  }
 )
 
 TopBackground.displayName = 'TopBackground'

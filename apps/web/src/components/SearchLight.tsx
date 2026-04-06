@@ -3,13 +3,18 @@
 import { useRef, useEffect, useCallback } from 'react'
 
 type SearchLightProps = {
-  isActive : boolean
-  angleValue : number
+  isActive: boolean
+  angleValue: number
   topEdgeWidth: number
-  bgImageSrc : string
+  bgImageSrc: string
 }
 
-export const SearchLight = ({ isActive, angleValue, topEdgeWidth, bgImageSrc }: SearchLightProps) => {
+export const SearchLight = ({
+  isActive,
+  angleValue,
+  topEdgeWidth,
+  bgImageSrc,
+}: SearchLightProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const angleRef = useRef(90)
   const animationStartTimeRef = useRef(0)
@@ -28,8 +33,12 @@ export const SearchLight = ({ isActive, angleValue, topEdgeWidth, bgImageSrc }: 
     const imgAspectRatio = img.width / img.height
     const canvasAspectRatio = canvas.width / canvas.height
     const isImageHorizontal = imgAspectRatio > canvasAspectRatio
-    const drawWidth = isImageHorizontal ? canvas.height * imgAspectRatio : canvas.width
-    const drawHeight = isImageHorizontal ? canvas.height : canvas.width / imgAspectRatio
+    const drawWidth = isImageHorizontal
+      ? canvas.height * imgAspectRatio
+      : canvas.width
+    const drawHeight = isImageHorizontal
+      ? canvas.height
+      : canvas.width / imgAspectRatio
     const offsetX = isImageHorizontal ? (canvas.width - drawWidth) / 2 : 0
     const offsetY = isImageHorizontal ? 0 : (canvas.height - drawHeight) / 2
     const centerX = canvas.width / 2
@@ -46,7 +55,7 @@ export const SearchLight = ({ isActive, angleValue, topEdgeWidth, bgImageSrc }: 
     ctx.beginPath()
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.translate(centerX, centerY)
-    ctx.rotate(angleRef.current * Math.PI / 180)
+    ctx.rotate((angleRef.current * Math.PI) / 180)
     ctx.moveTo(topEdgeStartX, -diagonal)
     ctx.lineTo(topEdgeEndX, -diagonal)
     ctx.lineTo(0, 0)
@@ -78,7 +87,8 @@ export const SearchLight = ({ isActive, angleValue, topEdgeWidth, bgImageSrc }: 
     animationStartTimeRef.current = 0
 
     const animate = (timestamp: DOMHighResTimeStamp) => {
-      if (!animationStartTimeRef.current) animationStartTimeRef.current = timestamp
+      if (!animationStartTimeRef.current)
+        animationStartTimeRef.current = timestamp
       const elapsedTime = timestamp - animationStartTimeRef.current
       const desiredAngle = ANGLE_CHANGE_SPEED * (elapsedTime / 1000)
 
@@ -107,14 +117,14 @@ export const SearchLight = ({ isActive, angleValue, topEdgeWidth, bgImageSrc }: 
     <canvas
       ref={canvasRef}
       style={{
-        inlineSize   : '100%',
-        blockSize    : '100%',
-        position     : 'fixed',
-        top          : 0,
-        left         : 0,
+        inlineSize: '100%',
+        blockSize: '100%',
+        position: 'fixed',
+        top: 0,
+        left: 0,
         pointerEvents: 'none',
-        opacity      : isActive ? 1 : 0,
-        transition   : 'opacity .3s',
+        opacity: isActive ? 1 : 0,
+        transition: 'opacity .3s',
       }}
     />
   )

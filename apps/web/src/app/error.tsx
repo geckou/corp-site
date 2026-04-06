@@ -5,7 +5,7 @@ import { useEffect } from 'react'
 // Sentry インストール後に有効化:
 // import { Sentry } from '@/lib/sentry'
 
-export default function Error ({
+export default function Error({
   error,
   reset,
 }: {

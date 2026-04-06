@@ -9,10 +9,7 @@ const compat = new FlatCompat({ baseDirectory: __dirname })
 
 export default [
   {
-    ignores: [
-      'eslint.config.mjs',
-      '.eslintrc.*',
-    ],
+    ignores: ['eslint.config.mjs', '.eslintrc.*'],
   },
   ...compat.extends('expo', 'prettier'),
   {
@@ -31,15 +28,21 @@ export default [
       },
     },
     rules: {
-      'arrow-parens': ['error', 'as-needed'],
-      curly: ['error', 'multi-line'],
-      'comma-dangle': ['error', 'always-multiline'],
-      'key-spacing': ['error', { align: 'colon' }],
-      'no-multi-spaces': ['error', { exceptions: { VariableDeclarator: true } }],
-      'no-floating-decimal': 'off',
-      'space-before-function-paren': ['error', 'always'],
-      'import/no-unresolved': ['error', { ignore: ['^expo-notifications$', '^expo-device$', '^@sentry/react-native$'] }],
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      // フォーマット系ルールは Prettier に委譲（eslint-config-prettier で無効化済み）
+      'import/no-unresolved': [
+        'error',
+        {
+          ignore: [
+            '^expo-notifications$',
+            '^expo-device$',
+            '^@sentry/react-native$',
+          ],
+        },
+      ],
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_' },
+      ],
     },
   },
 ]

@@ -8,14 +8,14 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
-    shouldSetBadge : true,
+    shouldSetBadge: true,
   }),
 })
 
 /**
  * プッシュ通知の権限をリクエストし、Expo Push Token を取得
  */
-export async function registerForPushNotifications (): Promise<string | null> {
+export async function registerForPushNotifications(): Promise<string | null> {
   if (!Device.isDevice) {
     console.warn('プッシュ通知は実機でのみ動作します')
     return null
@@ -46,7 +46,7 @@ export async function registerForPushNotifications (): Promise<string | null> {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
-      name      : 'default',
+      name: 'default',
       importance: Notifications.AndroidImportance.MAX,
     })
   }
@@ -57,9 +57,9 @@ export async function registerForPushNotifications (): Promise<string | null> {
 /**
  * 通知リスナーを登録
  */
-export function addNotificationListener (
+export function addNotificationListener(
   onReceived: (notification: Notifications.Notification) => void,
-  onResponse: (response: Notifications.NotificationResponse) => void,
+  onResponse: (response: Notifications.NotificationResponse) => void
 ) {
   const receivedSubscription =
     Notifications.addNotificationReceivedListener(onReceived)

@@ -11,7 +11,10 @@ type LogoAreaProps = {
   onScrollTo: (sectionId: string) => void
 }
 
-export const LogoArea = ({ 'data-section-id': dataSectionId, onScrollTo }: LogoAreaProps) => {
+export const LogoArea = ({
+  'data-section-id': dataSectionId,
+  onScrollTo,
+}: LogoAreaProps) => {
   const [isOutOfView, setIsOutOfView] = useState(false)
   const logoAreaRef = useRef<HTMLDivElement>(null)
 
@@ -20,8 +23,8 @@ export const LogoArea = ({ 'data-section-id': dataSectionId, onScrollTo }: LogoA
     if (!el) return
 
     const observer = new IntersectionObserver(
-      entries => setIsOutOfView(!entries[0].isIntersecting),
-      { root: null, rootMargin: '0px', threshold: 0.5 },
+      (entries) => setIsOutOfView(!entries[0].isIntersecting),
+      { root: null, rootMargin: '0px', threshold: 0.5 }
     )
 
     observer.observe(el)

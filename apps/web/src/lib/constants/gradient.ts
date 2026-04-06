@@ -1,5 +1,5 @@
 export type GradientStop = {
-  color : string
+  color: string
   gradientChangePoint: string
 }
 

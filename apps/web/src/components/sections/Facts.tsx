@@ -7,7 +7,7 @@ import { SectionHeading } from '@/components/SectionHeading'
 
 type FactsProps = {
   isActivated: boolean
-  heading : string
+  heading: string
 }
 
 const FACTS = [
@@ -15,8 +15,18 @@ const FACTS = [
   { team: '設立', descriptions: ['2019年12月25日'] },
   { team: '代表役員', descriptions: ['野島将吾'] },
   { team: '資本金', descriptions: ['100万円'] },
-  { team: '住所', descriptions: ['〒180-0006', '東京都武蔵野市中町2丁目8番14号', 'WILL吉祥寺302'] },
-  { team: '事業内容', descriptions: ['Webデザイン', 'Web開発の受託', 'Webサービス開発'] },
+  {
+    team: '住所',
+    descriptions: [
+      '〒180-0006',
+      '東京都武蔵野市中町2丁目8番14号',
+      'WILL吉祥寺302',
+    ],
+  },
+  {
+    team: '事業内容',
+    descriptions: ['Webデザイン', 'Web開発の受託', 'Webサービス開発'],
+  },
 ]
 
 const ANIMATION_DURATION = 700
@@ -35,11 +45,11 @@ export const Facts = ({ isActivated, heading }: FactsProps) => {
   return (
     <SectionContainer className="facts-container">
       <dl className="facts-list">
-        {FACTS.map(fact => (
+        {FACTS.map((fact) => (
           <div key={fact.team} className="facts-list-item">
             <dt>{fact.team}</dt>
             <dd>
-              {fact.descriptions.map(desc => (
+              {fact.descriptions.map((desc) => (
                 <div key={desc}>{desc}</div>
               ))}
             </dd>
@@ -48,7 +58,11 @@ export const Facts = ({ isActivated, heading }: FactsProps) => {
       </dl>
       <div
         className={`facts-rays-wrap ${isActivated ? 'active' : ''} ${isHidden ? 'hidden' : ''}`}
-        style={{ '--ray-animation-duration': `${ANIMATION_DURATION}ms` } as React.CSSProperties}
+        style={
+          {
+            '--ray-animation-duration': `${ANIMATION_DURATION}ms`,
+          } as React.CSSProperties
+        }
       >
         <div className="facts-ray" />
       </div>

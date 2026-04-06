@@ -11,103 +11,110 @@
 
 :root {
   /* COLOR */
-  --white          : #E0E0E4;
-  --black          : #00081a;
-  --light-black    : #424242;
-  --blue           : #1C4AC9;
-  --dark-blue      : #15143A;
-  --gray           : #d9d9d9;
-  --base-color     : var(--dark-blue);
-  --main-color     : var(--blue);
-  --text-color     : var(--white);
-  --link-color     : var(--blue);
-  --globe-color    : var(--black);
-  --light-color    : var(--gray);
-  --corp-color     : var(--blue);
-  --corp-black     : var(--light-black);
+  --white: #e0e0e4;
+  --black: #00081a;
+  --light-black: #424242;
+  --blue: #1c4ac9;
+  --dark-blue: #15143a;
+  --gray: #d9d9d9;
+  --base-color: var(--dark-blue);
+  --main-color: var(--blue);
+  --text-color: var(--white);
+  --link-color: var(--blue);
+  --globe-color: var(--black);
+  --light-color: var(--gray);
+  --corp-color: var(--blue);
+  --corp-black: var(--light-black);
 
   /* FONT */
-  --fs-medium            : clamp(0.875rem, 0.644rem + 0.46vw, 1rem);
-  --fs-large             : clamp(1rem, 0.769rem + 0.46vw, 1.125rem);
-  --fs-larger            : clamp(1.125rem, 0.663rem + 0.93vw, 1.375rem);
-  --fs-max               : clamp(1.75rem, 0.825rem + 1.85vw, 2.25rem);
-  --fs-small             : clamp(0.75rem, 0.519rem + 0.46vw, 0.875rem);
-  --fs-smaller           : clamp(0.688rem, 0.572rem + 0.23vw, 0.75rem);
-  --fs-min               : 10px;
-  --fs-form              : clamp(1.5rem, 0.575rem + 1.85vw, 2rem);
-  --fs-service-heading   : clamp(2.5rem, -3.981rem + 12.96vw, 6rem);
-  --fs-nav               : clamp(2.625rem, -0.844rem + 6.94vw, 4.5rem);
-  --fs-copyright         : clamp(0.625rem, 0.51rem + 0.23vw, 0.688rem);
-  --line-height-tight    : 1.1;
-  --line-height-narrow   : 1.4;
-  --line-height-normal   : 2;
-  --letter-spacing-normal: .1em;
-  --letter-spacing-narrow: .05em;
-  --font-family-en       : 'C4_Lanthanum_E', sans-serif;
+  --fs-medium: clamp(0.875rem, 0.644rem + 0.46vw, 1rem);
+  --fs-large: clamp(1rem, 0.769rem + 0.46vw, 1.125rem);
+  --fs-larger: clamp(1.125rem, 0.663rem + 0.93vw, 1.375rem);
+  --fs-max: clamp(1.75rem, 0.825rem + 1.85vw, 2.25rem);
+  --fs-small: clamp(0.75rem, 0.519rem + 0.46vw, 0.875rem);
+  --fs-smaller: clamp(0.688rem, 0.572rem + 0.23vw, 0.75rem);
+  --fs-min: 10px;
+  --fs-form: clamp(1.5rem, 0.575rem + 1.85vw, 2rem);
+  --fs-service-heading: clamp(2.5rem, -3.981rem + 12.96vw, 6rem);
+  --fs-nav: clamp(2.625rem, -0.844rem + 6.94vw, 4.5rem);
+  --fs-copyright: clamp(0.625rem, 0.51rem + 0.23vw, 0.688rem);
+  --line-height-tight: 1.1;
+  --line-height-narrow: 1.4;
+  --line-height-normal: 2;
+  --letter-spacing-normal: 0.1em;
+  --letter-spacing-narrow: 0.05em;
+  --font-family-en: 'C4_Lanthanum_E', sans-serif;
 
   /* HEIGHT */
   --button-height: calc(var(--bv) * 6);
-  --button-width : calc(var(--bv) * 40);
+  --button-width: calc(var(--bv) * 40);
 
   /* VALUE */
-  --bv                   : clamp(0.375rem, 0.144rem + 0.46vw, 0.5rem);
-  --sp                   : clamp(0.375rem, 0.144rem + 0.46vw, 0.5rem);
-  --sp-max               : calc(var(--sp) * 12);
-  --sp-larger            : calc(var(--sp) * 8);
-  --sp-large             : calc(var(--sp) * 4);
-  --sp-medium            : calc(var(--sp) * 2);
-  --sp-small             : var(--sp);
-  --sp-min               : calc(var(--sp) / 2);
-  --icon-medium          : calc(var(--bv) * 3);
-  --icon-small           : calc(var(--bv) * 2);
-  --nav-button-size      : calc(var(--bv) * 6);
-  --globe-height         : 24vmin;
-  --golden-ratio         : 1.618 / 1;
-  --silver-ratio         : 1.414 / 1;
-  --blur                 : 3px;
-  --mobile-lower-width   : 320px;
-  --tablet-lower-width   : 576px;
-  --desktop-lower-width  : 992px;
-  --contents-max-width   : 1440px;
-  --global-header-height : calc(var(--bv) * 8);
+  --bv: clamp(0.375rem, 0.144rem + 0.46vw, 0.5rem);
+  --sp: clamp(0.375rem, 0.144rem + 0.46vw, 0.5rem);
+  --sp-max: calc(var(--sp) * 12);
+  --sp-larger: calc(var(--sp) * 8);
+  --sp-large: calc(var(--sp) * 4);
+  --sp-medium: calc(var(--sp) * 2);
+  --sp-small: var(--sp);
+  --sp-min: calc(var(--sp) / 2);
+  --icon-medium: calc(var(--bv) * 3);
+  --icon-small: calc(var(--bv) * 2);
+  --nav-button-size: calc(var(--bv) * 6);
+  --globe-height: 24vmin;
+  --golden-ratio: 1.618 / 1;
+  --silver-ratio: 1.414 / 1;
+  --blur: 3px;
+  --mobile-lower-width: 320px;
+  --tablet-lower-width: 576px;
+  --desktop-lower-width: 992px;
+  --contents-max-width: 1440px;
+  --global-header-height: calc(var(--bv) * 8);
   --global-sub-nav-height: calc(var(--bv) * 6);
-  --z-index-max          : 100;
-  --z-index-overlay      : 90;
-  --z-index-tooltip      : 80;
-  --z-index-nav          : 70;
-  --z-index-header       : 60;
-  --z-index-contents     : 50;
-  --z-index-bg           : 10;
-  --first-gradient       : linear-gradient(180deg, #000515 0%, #050C1B 25%, #091220 50%, #0B1726 75%, #0C1B2C 100%);
+  --z-index-max: 100;
+  --z-index-overlay: 90;
+  --z-index-tooltip: 80;
+  --z-index-nav: 70;
+  --z-index-header: 60;
+  --z-index-contents: 50;
+  --z-index-bg: 10;
+  --first-gradient: linear-gradient(
+    180deg,
+    #000515 0%,
+    #050c1b 25%,
+    #091220 50%,
+    #0b1726 75%,
+    #0c1b2c 100%
+  );
 }
 
 /* BASE STYLES */
 html {
-  -moz-text-size-adjust   : none;
+  -moz-text-size-adjust: none;
   -webkit-text-size-adjust: none;
-  text-size-adjust        : none;
+  text-size-adjust: none;
 }
 
 body {
-  min-height           : 100svh;
-  inline-size          : 100vw;
-  overflow-x           : hidden;
-  color                : var(--text-color);
-  font-family          : 'Zen Kaku Gothic Antique', sans-serif;
-  font-size            : var(--fs-medium);
-  letter-spacing       : var(--letter-spacing-normal);
-  line-height          : var(--line-height-normal);
-  word-wrap            : break-word;
-  word-break           : auto-phrase;
-  overflow-wrap        : anywhere;
-  line-break           : strict;
+  min-height: 100svh;
+  inline-size: 100vw;
+  overflow-x: hidden;
+  color: var(--text-color);
+  font-family: 'Zen Kaku Gothic Antique', sans-serif;
+  font-size: var(--fs-medium);
+  letter-spacing: var(--letter-spacing-normal);
+  line-height: var(--line-height-normal);
+  word-wrap: break-word;
+  word-break: auto-phrase;
+  overflow-wrap: anywhere;
+  line-break: strict;
   font-feature-settings: 'palt';
-  overscroll-behavior  : none;
+  overscroll-behavior: none;
 }
 
 p {
-  margin     : 0;
-  padding    : 0;
+  margin: 0;
+  padding: 0;
   line-height: var(--line-height-normal);
 }
 
@@ -120,18 +127,28 @@ small {
   font-size: var(--fs-small);
 }
 
-h1, h2, h3, h4, h5, h6 {
-  margin     : 0;
-  padding    : 0;
-  color      : inherit;
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  padding: 0;
+  color: inherit;
   font-weight: bold;
-  font-size  : inherit;
+  font-size: inherit;
   line-height: var(--line-height-narrow);
 }
 
-ul, ol, li, dl, dt, dd {
-  margin    : 0;
-  padding   : 0;
+ul,
+ol,
+li,
+dl,
+dt,
+dd {
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
@@ -141,19 +158,19 @@ address {
 }
 
 img {
-  display        : block;
+  display: block;
   max-inline-size: 100%;
-  max-block-size : 100%;
+  max-block-size: 100%;
 }
 
 fieldset {
-  margin : 0;
+  margin: 0;
   padding: 0;
-  border : none;
+  border: none;
 }
 
 legend {
-  margin : 0;
+  margin: 0;
   padding: 0;
 }
 
@@ -162,12 +179,12 @@ option,
 button,
 select {
   background-color: transparent;
-  border          : none;
-  outline         : none;
-  color           : var(--main-color);
-  line-height     : var(--line-height-normal);
-  letter-spacing  : var(--letter-spacing-normal);
-  appearance      : none;
+  border: none;
+  outline: none;
+  color: var(--main-color);
+  line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
+  appearance: none;
 }
 
 input:focus,
@@ -178,34 +195,34 @@ select:focus {
 }
 
 button {
-  padding   : 0;
-  border    : none;
-  outline   : none;
-  font      : inherit;
-  color     : inherit;
+  padding: 0;
+  border: none;
+  outline: none;
+  font: inherit;
+  color: inherit;
   background: none;
-  cursor    : pointer;
+  cursor: pointer;
 }
 
 table {
   border-collapse: collapse;
-  border-spacing : 0;
+  border-spacing: 0;
 }
 
 table th,
 table td {
-  text-align    : left;
+  text-align: left;
   vertical-align: middle;
 }
 
 /* ANIMATIONS */
 @keyframes shown {
   0% {
-    opacity    : 0;
+    opacity: 0;
     text-shadow: 0 0 0 var(--corp-color);
   }
   100% {
-    opacity    : 1;
-    text-shadow: 0px .2em 0 var(--corp-color);
+    opacity: 1;
+    text-shadow: 0px 0.2em 0 var(--corp-color);
   }
 }

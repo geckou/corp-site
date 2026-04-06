@@ -10,7 +10,7 @@ type SectionHeadingProps = {
 }
 
 export const SectionHeading = ({ heading, isShown }: SectionHeadingProps) => {
-  const currentSection = useCurrentSection(s => s.currentSection)
+  const currentSection = useCurrentSection((s) => s.currentSection)
   const prevSectionRef = useRef(currentSection)
   const prevIsShownRef = useRef(isShown)
   const slideInRef = useRef<SVGAnimateElement>(null)
@@ -22,12 +22,12 @@ export const SectionHeading = ({ heading, isShown }: SectionHeadingProps) => {
 
   const centerX = viewBoxWidth / 2
   const centerY = viewBoxHeight / 2
-  const radius = Math.min(viewBoxWidth, viewBoxHeight) / 2 * 0.9
+  const radius = (Math.min(viewBoxWidth, viewBoxHeight) / 2) * 0.9
   const startAngle = 180
   const endAngle = 0
   const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1'
 
-  const svgData = `M ${centerX + radius * Math.cos(Math.PI * startAngle / 180)}, ${centerY + radius * Math.sin(Math.PI * startAngle / 180)} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${centerX + radius * Math.cos(Math.PI * endAngle / 180)} ${centerY + radius * Math.sin(Math.PI * endAngle / 180)}`
+  const svgData = `M ${centerX + radius * Math.cos((Math.PI * startAngle) / 180)}, ${centerY + radius * Math.sin((Math.PI * startAngle) / 180)} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${centerX + radius * Math.cos((Math.PI * endAngle) / 180)} ${centerY + radius * Math.sin((Math.PI * endAngle) / 180)}`
 
   // 一意な ID を生成（同じ heading 名の重複を避ける）
   const uniqueId = useId()
@@ -38,7 +38,11 @@ export const SectionHeading = ({ heading, isShown }: SectionHeadingProps) => {
 
     if (isShown && currentSectionBase !== prevBase) {
       slideInRef.current?.beginElement()
-    } else if (!isShown && isShown !== prevIsShownRef.current && currentSectionBase !== prevBase) {
+    } else if (
+      !isShown &&
+      isShown !== prevIsShownRef.current &&
+      currentSectionBase !== prevBase
+    ) {
       slideOutRef.current?.beginElement()
     }
 
@@ -48,20 +52,10 @@ export const SectionHeading = ({ heading, isShown }: SectionHeadingProps) => {
 
   return (
     <h2 className="section-heading">
-      <svg
-        viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
-      >
-        <path
-          id={pathId}
-          stroke="none"
-          fill="none"
-          d={svgData}
-        />
+      <svg viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}>
+        <path id={pathId} stroke="none" fill="none" d={svgData} />
         <text className="section-heading-text">
-          <textPath
-            href={`#${pathId}`}
-            startOffset="80%"
-          >
+          <textPath href={`#${pathId}`} startOffset="80%">
             {heading}
             <animate
               ref={slideInRef}

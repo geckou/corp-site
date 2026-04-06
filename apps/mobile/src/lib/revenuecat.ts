@@ -4,7 +4,7 @@ import Purchases from 'react-native-purchases'
 
 const extra = Constants.expoConfig?.extra ?? {}
 
-export async function initializeRevenueCat () {
+export async function initializeRevenueCat() {
   const apiKey =
     Platform.OS === 'ios'
       ? extra.revenuecatApiKeyApple
@@ -16,18 +16,18 @@ export async function initializeRevenueCat () {
 }
 
 /** Firebase UID と RevenueCat ユーザーを紐付ける */
-export async function loginRevenueCat (uid: string) {
+export async function loginRevenueCat(uid: string) {
   await Purchases.logIn(uid)
 }
 
-export async function logoutRevenueCat () {
+export async function logoutRevenueCat() {
   await Purchases.logOut()
 }
 
-export async function getCustomerInfo () {
+export async function getCustomerInfo() {
   return Purchases.getCustomerInfo()
 }
 
-export async function getOfferings () {
+export async function getOfferings() {
   return Purchases.getOfferings()
 }

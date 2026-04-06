@@ -17,7 +17,7 @@ export const NavButton = ({ isActive, className, onClick }: NavButtonProps) => {
       onClick={onClick}
       aria-label="メニューを開く"
       style={{
-        inlineSize : 'var(--nav-button-size)',
+        inlineSize: 'var(--nav-button-size)',
         aspectRatio: '1 / 1',
       }}
     >
@@ -43,50 +43,53 @@ const MenuIcon = ({ isShown }: { isShown: boolean }) => {
   return (
     <div
       style={{
-        inlineSize    : 'var(--nav-button-size)',
-        aspectRatio   : '1 / 1',
-        display       : 'flex',
-        flexDirection : 'column',
+        inlineSize: 'var(--nav-button-size)',
+        aspectRatio: '1 / 1',
+        display: 'flex',
+        flexDirection: 'column',
         justifyContent: 'center',
-        alignItems    : statusClass === 'shown' ? 'flex-end' : 'flex-start',
-        gap           : 'calc(var(--sp-small) * 1.5)',
+        alignItems: statusClass === 'shown' ? 'flex-end' : 'flex-start',
+        gap: 'calc(var(--sp-small) * 1.5)',
       }}
     >
-      {[1, 2].map(i => (
+      {[1, 2].map((i) => (
         <span
           key={i}
           style={{
-            display         : 'flex',
-            alignItems      : 'center',
-            gap             : 'var(--sp-min)',
-            inlineSize      : statusClass === 'hidden' ? 0 : '100%',
-            transition      : 'all 0.3s ease-out',
-            opacity         : statusClass === 'hidden' ? 0 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--sp-min)',
+            inlineSize: statusClass === 'hidden' ? 0 : '100%',
+            transition: 'all 0.3s ease-out',
+            opacity: statusClass === 'hidden' ? 0 : 1,
             paddingInlineEnd: i === 2 ? 'var(--sp-small)' : undefined,
-            transitionDelay : statusClass === 'shown'
-              ? i === 1 ? '0.2s' : '0.26s'
-              : undefined,
+            transitionDelay:
+              statusClass === 'shown'
+                ? i === 1
+                  ? '0.2s'
+                  : '0.26s'
+                : undefined,
           }}
         >
           <span
             style={{
-              content        : '""',
-              display        : 'inline-block',
+              content: '""',
+              display: 'inline-block',
               backgroundColor: 'var(--white)',
-              inlineSize     : 'calc(var(--bv) / 2)',
-              aspectRatio    : '1 / 1',
-              borderRadius   : '50%',
-              flexShrink     : 0,
+              inlineSize: 'calc(var(--bv) / 2)',
+              aspectRatio: '1 / 1',
+              borderRadius: '50%',
+              flexShrink: 0,
             }}
           />
           <span
             style={{
-              flex                  : '1 1 auto',
-              blockSize             : 'calc(var(--bv) / 2 - 2px)',
-              borderRadius          : '50%',
-              borderTopLeftRadius   : 'calc(var(--bv) / 4) 50%',
+              flex: '1 1 auto',
+              blockSize: 'calc(var(--bv) / 2 - 2px)',
+              borderRadius: '50%',
+              borderTopLeftRadius: 'calc(var(--bv) / 4) 50%',
               borderBottomLeftRadius: 'calc(var(--bv) / 4) 50%',
-              backgroundColor       : 'var(--white)',
+              backgroundColor: 'var(--white)',
             }}
           />
         </span>
@@ -107,17 +110,15 @@ const CloseIcon = ({ isShown }: { isShown: boolean }) => {
   return (
     <div
       style={{
-        inlineSize    : 'var(--nav-button-size)',
-        aspectRatio   : '1 / 1',
-        display       : 'flex',
+        inlineSize: 'var(--nav-button-size)',
+        aspectRatio: '1 / 1',
+        display: 'flex',
         justifyContent: 'center',
-        alignItems    : 'center',
-        padding       : 'var(--sp-small)',
+        alignItems: 'center',
+        padding: 'var(--sp-small)',
       }}
     >
-      <LightIcon
-        className={`nav-close-icon ${statusClass}`}
-      />
+      <LightIcon className={`nav-close-icon ${statusClass}`} />
       <style>{`
         .nav-close-icon {
           inline-size: 100%;
