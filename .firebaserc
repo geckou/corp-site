@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "your-project-develop",
+    "develop": "your-project-develop",
+    "staging": "your-project-staging",
+    "production": "your-project-production"
+  }
+}

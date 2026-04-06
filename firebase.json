@@ -1,0 +1,25 @@
+{
+  "functions": {
+    "source": "apps/functions",
+    "runtime": "nodejs20",
+    "predeploy": ["yarn workspace @geckou/functions build"]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "source": "apps/web",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "frameworksBackend": {
+      "region": "asia-northeast1"
+    }
+  },
+  "emulators": {
+    "functions": { "port": 5001 },
+    "hosting": { "port": 5002 },
+    "firestore": { "port": 8080 },
+    "auth": { "port": 9099 },
+    "ui": { "enabled": true }
+  }
+}
