@@ -14,9 +14,9 @@ Turborepo モノレポ。Next.js 15 (Web) + Expo 52 (Mobile) + Firebase Cloud Fu
 
 | ドキュメント | URL | 内容 |
 |---|---|---|
-| 企画書 | `<Notion URL>` | プロダクト概要・ターゲット・用語集・機能一覧 |
-| 仕様書 | `<Notion URL>` | 画面一覧・データモデル・API・セキュリティ |
-| ロードマップ | `<Notion URL>` | 機能ごとのステータス・優先度・担当 |
+| 企画書 | `https://www.notion.so/33ad4761bc6d8195926ed9453e5dfeef` | プロダクト概要・ターゲット・用語集・機能一覧 |
+| 仕様書 | `https://www.notion.so/33ad4761bc6d81c7af2dec4fdcdfa7db` | 画面一覧・データモデル・API・セキュリティ |
+| ロードマップ | `https://www.notion.so/704043d1feae4b998645dd83d45dcbf9` | 機能ごとのステータス・優先度・担当 |
 | Figma | `<Figma URL>` | デザインカンプ |
 
 ※ Notion MCP で直接読み取れる。URL を最新に保つこと。

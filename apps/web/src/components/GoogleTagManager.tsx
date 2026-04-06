@@ -2,7 +2,7 @@ import Script from 'next/script'
 
 const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID
 
-export function GoogleTagManager() {
+export function GoogleTagManager () {
   if (!GTM_ID) return null
 
   return (
@@ -24,7 +24,7 @@ export function GoogleTagManager() {
   )
 }
 
-export function GoogleTagManagerNoscript() {
+export function GoogleTagManagerNoscript () {
   if (!GTM_ID) return null
 
   return (

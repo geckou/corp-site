@@ -18,9 +18,9 @@ type ApiResponse<T> = {
 /**
  * Cloud Functions API を呼び出す共通ヘルパー
  */
-export async function apiClient<T>(
+export async function apiClient<T> (
   path: string,
-  options: ApiOptions = {}
+  options: ApiOptions = {},
 ): Promise<ApiResponse<T>> {
   const { method = 'GET', body, authenticated = true } = options
 
@@ -54,7 +54,7 @@ export async function apiClient<T>(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error  : error instanceof Error ? error.message : 'Unknown error',
     }
   }
 }

@@ -5,7 +5,7 @@ import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-export default function LoginPage() {
+export default function LoginPage () {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -35,7 +35,7 @@ export default function LoginPage() {
           type="email"
           placeholder="メールアドレス"
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onChange={event => setEmail(event.target.value)}
           className="w-full rounded border px-3 py-2"
           required
         />
@@ -43,7 +43,7 @@ export default function LoginPage() {
           type="password"
           placeholder="パスワード"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={event => setPassword(event.target.value)}
           className="w-full rounded border px-3 py-2"
           required
         />

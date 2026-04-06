@@ -9,7 +9,7 @@ import {
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 
-function getAdminApp() {
+function getAdminApp () {
   if (getApps().length > 0) {
     return getApps()[0]
   }
