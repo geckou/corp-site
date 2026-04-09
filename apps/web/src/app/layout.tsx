@@ -1,9 +1,12 @@
 import type { Metadata } from 'next'
 import '@/styles/globals.css'
 
+const isNonProduction = !!process.env.BASIC_AUTH_CREDENTIALS
+
 export const metadata: Metadata = {
   title: '合同会社Geckou',
   description: 'デザインから開発まで一貫して行なっています。',
+  robots: isNonProduction ? { index: false, follow: false } : undefined,
   openGraph: {
     title: '合同会社Geckou',
     description: 'デザインから開発まで一貫して行なっています。',
