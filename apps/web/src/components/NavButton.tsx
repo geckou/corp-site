@@ -21,10 +21,10 @@ export const NavButton = ({ isActive, className, onClick }: NavButtonProps) => {
         aspectRatio: '1 / 1',
       }}
     >
-      <div style={{ position: 'absolute', inset: 0 }}>
+      <div className="absolute inset-0">
         <MenuIcon isShown={isActive} />
       </div>
-      <div style={{ position: 'absolute', inset: 0 }}>
+      <div className="absolute inset-0">
         <CloseIcon isShown={!isActive} />
       </div>
     </button>

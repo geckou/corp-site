@@ -5,37 +5,20 @@ type BackgroundGlobeProps = {
 }
 
 export const BackgroundGlobe = ({ rotate }: BackgroundGlobeProps) => (
-  <div className="globe-body">
+  <div className="relative w-full aspect-square">
     {/* eslint-disable-next-line @next/next/no-img-element */}
     <img
-      className="globe-shadow"
+      className="absolute top-0 m-auto"
       src="/images/globe_shadow.svg"
       alt=""
       style={{ rotate: `${rotate}deg` }}
     />
     {/* eslint-disable-next-line @next/next/no-img-element */}
     <img
-      className="globe-silhouette"
+      className="absolute m-auto"
       src="/images/globe_silhouette.svg"
       alt=""
-      style={{ rotate: `${rotate}deg` }}
+      style={{ rotate: `${rotate}deg`, top: 'var(--sp-small)' }}
     />
-    <style>{`
-      .globe-body {
-        inline-size: 100%;
-        aspect-ratio: 1 / 1;
-        position: relative;
-      }
-      .globe-body > * {
-        position: absolute;
-        margin: auto;
-      }
-      .globe-shadow {
-        top: 0;
-      }
-      .globe-silhouette {
-        top: var(--sp-small);
-      }
-    `}</style>
   </div>
 )

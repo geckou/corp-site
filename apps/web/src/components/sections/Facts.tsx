@@ -43,12 +43,12 @@ export const Facts = ({ isActivated, heading }: FactsProps) => {
   }, [isActivated])
 
   return (
-    <SectionContainer className="facts-container">
-      <dl className="facts-list">
+    <SectionContainer className="flex justify-end items-end p-sp-max max-sm:p-sp-large">
+      <dl className="flex flex-col text-right z-contents leading-[1.7] facts-list">
         {FACTS.map((fact) => (
-          <div key={fact.team} className="facts-list-item">
-            <dt>{fact.team}</dt>
-            <dd>
+          <div key={fact.team} className="facts-list-item mb-sp-large">
+            <dt className="mb-sp-small text-fs-small">{fact.team}</dt>
+            <dd className="font-bold">
               {fact.descriptions.map((desc) => (
                 <div key={desc}>{desc}</div>
               ))}
@@ -68,16 +68,6 @@ export const Facts = ({ isActivated, heading }: FactsProps) => {
       </div>
       <SectionHeading heading={heading} isShown={isActivated} />
       <style>{`
-        .facts-container {
-          display: flex;
-          justify-content: flex-end;
-          align-items: flex-end;
-          padding: var(--sp-max);
-        }
-        @media (max-width: 576px) {
-          .facts-container { padding: var(--sp-large); }
-        }
-        .facts-list-item { margin-block-end: var(--sp-large); }
         .facts-list-item dt,
         .facts-list-item dd {
           animation-name: shown;
@@ -86,18 +76,6 @@ export const Facts = ({ isActivated, heading }: FactsProps) => {
           animation-fill-mode: forwards;
           opacity: 0;
           text-shadow: 0 0 0 var(--corp-color);
-        }
-        .facts-list-item dt {
-          margin-block-end: var(--sp-small);
-          font-size: var(--fs-small);
-        }
-        .facts-list-item dd { font-weight: bold; }
-        .facts-list {
-          display: flex;
-          flex-direction: column;
-          text-align: right;
-          z-index: var(--z-index-contents);
-          line-height: 1.7;
         }
         .facts-rays-wrap {
           --ray-skew: -36deg;

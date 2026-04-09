@@ -1,6 +1,9 @@
 {
   "projects": {
-    "default": "geckou-llc"
+    "default": "geckou-llc",
+    "develop": "geckou-llc",
+    "staging": "geckou-llc",
+    "production": "geckou-llc"
   },
   "targets": {
     "geckou-llc": {

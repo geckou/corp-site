@@ -35,12 +35,38 @@ echo "[deploy] Firebase にデプロイ中..."
 
 if [ -n "$ONLY_FLAG" ]; then
   if [ "$ONLY_FLAG" = "hosting" ]; then
-    firebase deploy --only "hosting:${ENV}"
+    firebase deploy --only "hosting:${ENV}" --force
   else
-    firebase deploy --only "${ONLY_FLAG}"
+    firebase deploy --only "${ONLY_FLAG}" --force
   fi
 else
-  firebase deploy --only "hosting:${ENV},functions"
+  firebase deploy --only "hosting:${ENV},functions" --force
+fi
+
+# SSR 関数の .env にアプリ環境変数をマージ（frameworksBackend が自動生成する .env に不足分を追記）
+SITE_MAP_production="geckou-llc"
+SITE_MAP_staging="stg-geckou-llc"
+SITE_MAP_develop="dev-geckou-llc"
+SITE_VAR="SITE_MAP_${ENV}"
+SITE_NAME="${!SITE_VAR}"
+SSR_ENV=".firebase/${SITE_NAME}/functions/.env"
+
+if [ -f "$SSR_ENV" ] && [ -f ".env.${ENV}" ]; then
+  PATCHED=false
+  while IFS= read -r line; do
+    [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+    KEY="${line%%=*}"
+    [[ "$KEY" == NEXT_PUBLIC_* ]] && continue
+    grep -q "^${KEY}=" "$SSR_ENV" && continue
+    echo "$line" >> "$SSR_ENV"
+    echo "  [patch] + ${KEY}"
+    PATCHED=true
+  done < ".env.${ENV}"
+
+  if [ "$PATCHED" = true ]; then
+    echo "[patch] SSR 関数の環境変数をパッチしました。再デプロイ中..."
+    firebase deploy --only "hosting:${ENV}" --force
+  fi
 fi
 
 echo ""

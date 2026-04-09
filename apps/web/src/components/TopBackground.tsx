@@ -24,33 +24,14 @@ export const TopBackground = forwardRef<TopBackgroundRef, TopBackgroundProps>(
     }))
 
     return (
-      <div
-        className={className}
-        style={{
-          inlineSize: '100%',
-          blockSize: '100svh',
-          pointerEvents: 'none',
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 'var(--z-index-bg)',
-          }}
-        >
+      <div className={`w-full h-svh pointer-events-none ${className ?? ''}`}>
+        <div className="absolute inset-0 z-bg">
           <GradientBackground
             ref={gradientRef}
             scrollPercentage={scrollPercentage}
           />
         </div>
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 'var(--z-index-bg)',
-          }}
-        >
+        <div className="absolute inset-0 z-bg">
           <StarrySky />
         </div>
       </div>

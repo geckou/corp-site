@@ -60,23 +60,18 @@ export const GradientBackground = forwardRef<
   }
 
   return (
-    <div style={{ inlineSize: '100%', blockSize: '100svh' }}>
+    <div className="w-full h-svh">
       {backgroundGradients.map((gradient, index) => (
         <div
           key={index}
+          className="absolute inset-0 w-full h-svh transition-opacity duration-1000"
           style={{
-            inlineSize: '100%',
-            blockSize: '100svh',
-            position: 'absolute',
-            top: 0,
-            left: 0,
             backgroundImage: `radial-gradient(circle at 50% 150%, ${conversionGradientColor(gradient)})`,
             opacity:
               backgroundGradients.length === index + 1
                 ? 10
                 : calcOpacity(index),
             zIndex: `calc(var(--z-index-bg) - ${index})`,
-            transition: 'opacity 1s',
           }}
         />
       ))}
