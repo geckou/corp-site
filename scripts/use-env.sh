@@ -12,9 +12,11 @@ if [ ! -f ".env.${ENV}" ]; then
 fi
 
 # ルートと apps/web に .env.local をコピー
+# .env も上書き（Firebase Cloud Functions ランタイムが .env を参照するため）
 cp ".env.${ENV}" .env.local
+cp ".env.${ENV}" .env
 cp ".env.${ENV}" apps/web/.env.local
-echo "[done] .env.${ENV} → .env.local にコピーしました"
+echo "[done] .env.${ENV} → .env.local, .env にコピーしました"
 
 # Firebase プロジェクトを切り替え
 firebase use "${ENV}" 2>/dev/null && echo "[done] Firebase プロジェクトを ${ENV} に切り替えました" || echo "[warn] firebase use ${ENV} に失敗しました（.firebaserc を確認してください）"
