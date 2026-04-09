@@ -7,7 +7,7 @@ ENV=${1:-develop}
 ONLY_FLAG=""
 
 if [ "$2" = "--only" ] && [ -n "$3" ]; then
-  ONLY_FLAG="--only $3"
+  ONLY_FLAG="$3"
 fi
 
 echo "=== デプロイ: ${ENV} 環境 ==="
@@ -34,9 +34,13 @@ echo ""
 echo "[deploy] Firebase にデプロイ中..."
 
 if [ -n "$ONLY_FLAG" ]; then
-  firebase deploy ${ONLY_FLAG}
+  if [ "$ONLY_FLAG" = "hosting" ]; then
+    firebase deploy --only "hosting:${ENV}"
+  else
+    firebase deploy --only "${ONLY_FLAG}"
+  fi
 else
-  firebase deploy
+  firebase deploy --only "hosting:${ENV},functions"
 fi
 
 echo ""

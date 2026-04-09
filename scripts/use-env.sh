@@ -11,8 +11,9 @@ if [ ! -f ".env.${ENV}" ]; then
   exit 1
 fi
 
-# .env.local にコピー
+# ルートと apps/web に .env.local をコピー
 cp ".env.${ENV}" .env.local
+cp ".env.${ENV}" apps/web/.env.local
 echo "[done] .env.${ENV} → .env.local にコピーしました"
 
 # Firebase プロジェクトを切り替え

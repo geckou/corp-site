@@ -8,13 +8,32 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "hosting": {
-    "source": "apps/web",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "frameworksBackend": {
-      "region": "asia-northeast1"
+  "hosting": [
+    {
+      "target": "production",
+      "source": "apps/web",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "frameworksBackend": {
+        "region": "asia-northeast1"
+      }
+    },
+    {
+      "target": "staging",
+      "source": "apps/web",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "frameworksBackend": {
+        "region": "asia-northeast1"
+      }
+    },
+    {
+      "target": "develop",
+      "source": "apps/web",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "frameworksBackend": {
+        "region": "asia-northeast1"
+      }
     }
-  },
+  ],
   "emulators": {
     "functions": { "port": 5001 },
     "hosting": { "port": 5002 },

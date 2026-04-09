@@ -1,8 +1,14 @@
 {
   "projects": {
-    "default": "geckou-llc",
-    "develop": "geckou-llc",
-    "staging": "geckou-llc",
-    "production": "geckou-llc"
+    "default": "geckou-llc"
+  },
+  "targets": {
+    "geckou-llc": {
+      "hosting": {
+        "production": ["geckou-llc"],
+        "staging": ["stg-geckou-llc"],
+        "develop": ["dev-geckou-llc"]
+      }
+    }
   }
 }

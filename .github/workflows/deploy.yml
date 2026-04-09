@@ -6,10 +6,6 @@ on:
       - production # → production 環境
       - 'release/**' # → staging 環境
       - 'hotfix/**' # → staging 環境
-      - 'feat/**' # → develop 環境
-      - 'fix/**' # → develop 環境
-      - 'refactor/**' # → develop 環境
-      - 'test/**' # → develop 環境
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -57,7 +53,6 @@ jobs:
       - name: Deploy to Firebase
         run: |
           npx firebase-tools experiments:enable webframeworks
-          npx firebase-tools use ${{ steps.env.outputs.name }}
-          npx firebase-tools deploy --only hosting --force
+          npx firebase-tools deploy --only hosting:${{ steps.env.outputs.name }} --force
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
