@@ -15,7 +15,7 @@ export const ServiceItem = ({
   heading,
   description,
 }: ServiceItemProps) => (
-  <div style={{ zIndex: 'var(--z-index-contents)' }}>
+  <div className="z-contents">
     <h3
       className="service-item-heading"
       style={
@@ -33,7 +33,7 @@ export const ServiceItem = ({
       {heading}
     </h3>
     <div className="service-item-description">
-      <p style={{ position: 'relative' }}>{description}</p>
+      <p className="relative">{description}</p>
       {linkButton && (
         <LinkButton url={linkButton.url} className="service-item-link">
           {linkButton.text}

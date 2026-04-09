@@ -23,7 +23,7 @@ export const GlobalNav = ({ onScrollTo }: GlobalNavProps) => {
   }
 
   return (
-    <div style={{ display: 'contents' }}>
+    <div className="contents">
       <div
         className={`global-nav-bg-light ${isOpenedNav ? 'open' : ''}`}
         onClick={() => setIsOpenedNav(!isOpenedNav)}
@@ -33,7 +33,7 @@ export const GlobalNav = ({ onScrollTo }: GlobalNavProps) => {
           className={`global-nav-light ${isOpenedNav ? 'open' : ''}`}
         />
       </div>
-      <nav className={`global-nav ${isOpenedNav ? 'open' : ''}`}>
+      <nav className={`flex items-end flex-col gap-sp-larger fixed bottom-sp-large right-0 opacity-0 pointer-events-none global-nav ${isOpenedNav ? 'open' : ''}`}>
         <button
           className="global-nav-link"
           type="button"
@@ -100,17 +100,6 @@ export const GlobalNav = ({ onScrollTo }: GlobalNavProps) => {
           transition: all .2s ease;
         }
         .global-nav-light.open { scale: 20; opacity: 1; }
-        .global-nav {
-          display: flex;
-          align-items: flex-end;
-          flex-direction: column;
-          gap: var(--sp-larger);
-          position: fixed;
-          bottom: var(--sp-large);
-          right: 0;
-          opacity: 0;
-          pointer-events: none;
-        }
         .global-nav.open {
           opacity: 1;
           z-index: var(--z-index-nav);

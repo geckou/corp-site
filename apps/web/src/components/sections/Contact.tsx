@@ -19,7 +19,7 @@ export const Contact = ({ isActivated, heading }: ContactProps) => {
   }, [isActivated])
 
   return (
-    <SectionContainer className="contact-container">
+    <SectionContainer className="flex justify-start items-center" style={{ marginBlockEnd: 'calc(var(--globe-height) * -1)' }}>
       <ContactForm isActive={isActivated} />
       <div
         className={`contact-copyright ${isActivated ? 'active' : ''} ${isHidden ? 'hidden' : ''}`}
@@ -28,12 +28,6 @@ export const Contact = ({ isActivated, heading }: ContactProps) => {
       </div>
       <SectionHeading heading={heading} isShown={isActivated} />
       <style>{`
-        .contact-container {
-          display: flex;
-          justify-content: left;
-          align-items: center;
-          margin-block-end: calc(var(--globe-height) * -1);
-        }
         .contact-copyright {
           display: block;
           inline-size: 300px;

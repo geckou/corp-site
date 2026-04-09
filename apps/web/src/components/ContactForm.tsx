@@ -25,7 +25,7 @@ export const ContactForm = ({ isActive }: ContactFormProps) => {
     <form
       method="post"
       action="https://hyperform.jp/api/rZXPtamT"
-      className="contact-form"
+      className="w-full flex flex-col gap-sp-large contact-form"
     >
       {inputItems.map((item, index) => (
         <fieldset
@@ -84,12 +84,6 @@ export const ContactForm = ({ isActive }: ContactFormProps) => {
       </button>
 
       <style>{`
-        .contact-form {
-          inline-size: 100%;
-          display: flex;
-          flex-direction: column;
-          gap: var(--sp-large);
-        }
         .contact-form > *:nth-child(1) { --input-width: min(calc(var(--bv) * 80 - var(--sp-large)), 100% - var(--sp-medium)); }
         .contact-form > *:nth-child(2) { --input-width: min(calc(var(--bv) * 80 - 2 * var(--sp-large)), 100% - 2 * var(--sp-medium)); }
         .contact-form > *:nth-child(3) { --input-width: min(calc(var(--bv) * 80 - 4 * var(--sp-large)), 100% - 4 * var(--sp-medium)); }

@@ -182,14 +182,14 @@ export default function Home() {
   }, [updateCurrentSection])
 
   return (
-    <div ref={containerRef} className="main-container">
+    <div ref={containerRef} className="h-svh overflow-auto overscroll-none scrollbar-hide">
       <TopBackground
         ref={topBackgroundRef}
-        className="main-background"
+        className="fixed top-0 left-0"
         scrollPercentage={scrollPercentage}
       />
       <LogoArea data-section-id="logo" onScrollTo={scrollToSection} />
-      <div ref={sectionAreaRef} className="section-area">
+      <div ref={sectionAreaRef} className="h-svh overflow-auto overscroll-none scrollbar-hide">
         {sections.map((section) => {
           const Component = SECTION_COMPONENTS[section.component]
           return Component ? (
@@ -201,42 +201,14 @@ export default function Home() {
             </div>
           ) : null
         })}
-        <div className="globe-wrap">
+        <div className="globe-wrap w-full max-w-contents h-globe-h mx-auto sticky bottom-0 overflow-hidden z-contents pointer-events-none">
           <BackgroundGlobe rotate={globeRotateValue} />
         </div>
         <GlobalNav onScrollTo={scrollToSection} />
         <SplashScreen />
       </div>
       <style>{`
-        .main-container {
-          block-size: 100svh;
-          overflow: auto;
-          overscroll-behavior: none;
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        .main-container::-webkit-scrollbar { display: none; }
-        .section-area {
-          block-size: 100svh;
-          overflow: auto;
-          overscroll-behavior: none;
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        .section-area::-webkit-scrollbar { display: none; }
-        .globe-wrap {
-          inline-size: 100%;
-          max-inline-size: var(--contents-max-width);
-          block-size: var(--globe-height);
-          margin-inline: auto;
-          position: sticky;
-          bottom: 0;
-          overflow: hidden;
-          z-index: var(--z-index-contents);
-          pointer-events: none;
-        }
         .globe-wrap > * { position: absolute; top: 0; }
-        .main-background { position: fixed; top: 0; left: 0; }
       `}</style>
     </div>
   )

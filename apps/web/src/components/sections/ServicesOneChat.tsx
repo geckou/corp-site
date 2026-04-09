@@ -37,7 +37,7 @@ export const ServicesOneChat = ({
       : '/images/one_chat.webp'
 
   return (
-    <SectionContainer className="services-onechat-container">
+    <SectionContainer className="flex items-center justify-end">
       <SearchLight
         isActive={isActivated}
         angleValue={angleValues.left.angleValue}
@@ -71,13 +71,6 @@ export const ServicesOneChat = ({
         }
       />
       <SectionHeading heading={heading} isShown={isShownHeading} />
-      <style>{`
-        .services-onechat-container {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-        }
-      `}</style>
     </SectionContainer>
   )
 }

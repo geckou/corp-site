@@ -37,7 +37,7 @@ export const ServicesDevelopment = ({
       : '/images/development.webp'
 
   return (
-    <SectionContainer className="services-development-container">
+    <SectionContainer className="flex items-center">
       <SearchLight
         isActive={isActivated}
         angleValue={angleValues.left.angleValue}
@@ -75,12 +75,6 @@ export const ServicesDevelopment = ({
         }
       />
       <SectionHeading heading={heading} isShown={isShownHeading} />
-      <style>{`
-        .services-development-container {
-          display: flex;
-          align-items: center;
-        }
-      `}</style>
     </SectionContainer>
   )
 }

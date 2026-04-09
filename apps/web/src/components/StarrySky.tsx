@@ -67,14 +67,7 @@ export const StarrySky = () => {
   return (
     <canvas
       ref={canvasRef}
-      style={{
-        inlineSize: '100%',
-        blockSize: '100%',
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        pointerEvents: 'none',
-      }}
+      className="absolute inset-0 w-full h-full pointer-events-none"
     />
   )
 }

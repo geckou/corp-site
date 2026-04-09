@@ -16,15 +16,15 @@ export const About = ({ isActivated }: AboutProps) => {
   }, [isActivated])
 
   return (
-    <SectionContainer className="section-about">
+    <SectionContainer className="flex items-center justify-center flex-col gap-sp-large section-about">
       {isShownText && (
         <>
-          <p className="about-text about-text-1">
-            Geckouという名前は、月光が暗闇で迷う人を照らして導くように、
+          <p className="about-text about-text-1 text-fs-large z-contents opacity-0">
+            Geckouという名前は、月光が暗闘で迷う人を照らして導くように、
             <br />
             「人々の支えとなる存在でありたい」という想いから名付けられました。
           </p>
-          <p className="about-text about-text-2">
+          <p className="about-text about-text-2 text-fs-large z-contents opacity-0">
             エンタテインメントのような付加価値の提供だけではなく、
             <br />
             Webサービス、Web開発の効率化により、悩みや不満を解消することで、
@@ -34,13 +34,6 @@ export const About = ({ isActivated }: AboutProps) => {
         </>
       )}
       <style>{`
-        .section-about {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-direction: column;
-          gap: var(--sp-large);
-        }
         .section-about::before {
           content: '';
           inline-size: min(50svh, 50vw);
@@ -55,13 +48,10 @@ export const About = ({ isActivated }: AboutProps) => {
           inset: 0;
         }
         .about-text {
-          font-size: var(--fs-large);
-          z-index: var(--z-index-contents);
           animation-name: shown;
           animation-duration: .8s;
           animation-timing-function: ease-in;
           animation-fill-mode: forwards;
-          opacity: 0;
           text-shadow: 0 0 0 var(--corp-color);
         }
         .about-text-1 { animation-delay: 0s; }

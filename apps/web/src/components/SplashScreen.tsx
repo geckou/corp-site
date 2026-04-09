@@ -23,7 +23,10 @@ export const SplashScreen = () => {
   if (!isLoading) return null
 
   return (
-    <div className={`splash-screen ${fadeOut ? 'fade-out' : ''}`}>
+    <div
+      className={`fixed inset-0 w-full h-screen z-overlay grid place-items-center transition-opacity duration-500 ease-in-out ${fadeOut ? 'opacity-0' : 'opacity-100'}`}
+      style={{ background: 'var(--first-gradient)' }}
+    >
       <div
         className="splash-logo"
         style={
@@ -33,22 +36,9 @@ export const SplashScreen = () => {
         }
       >
         <LogoSymbol variant="white" />
-        <LogoText className="splash-logo-text" variant="white" />
+        <LogoText className="splash-logo-text mt-[15%]" variant="white" />
       </div>
       <style>{`
-        .splash-screen {
-          inline-size: 100%;
-          block-size: 100vh;
-          background: var(--first-gradient);
-          display: grid;
-          place-items: center;
-          position: fixed;
-          inset: 0;
-          z-index: var(--z-index-overlay);
-          opacity: 1;
-          transition: opacity 0.5s ease-in-out;
-        }
-        .splash-screen.fade-out { opacity: 0; }
         .splash-logo {
           --logo-width: calc(var(--bv) * 32);
           inline-size: calc(var(--logo-width) + var(--logo-width) * .625);
@@ -65,7 +55,6 @@ export const SplashScreen = () => {
           animation-timing-function: ease-in-out;
         }
         .splash-logo > * { inline-size: 100%; }
-        .splash-logo-text { margin-block-start: 15%; }
         @keyframes loadingAnime {
           0% { filter: blur(200px); }
           50% { filter: blur(100px); }
