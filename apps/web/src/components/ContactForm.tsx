@@ -25,7 +25,7 @@ export const ContactForm = ({ isActive }: ContactFormProps) => {
     <form
       method="post"
       action="https://hyperform.jp/api/rZXPtamT"
-      className="w-full flex flex-col gap-sp-large contact-form"
+      className="gap-sp-large contact-form flex w-full flex-col"
     >
       {inputItems.map((item, index) => (
         <fieldset

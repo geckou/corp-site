@@ -24,7 +24,7 @@ export const SplashScreen = () => {
 
   return (
     <div
-      className={`fixed inset-0 w-full h-screen z-overlay grid place-items-center transition-opacity duration-500 ease-in-out ${fadeOut ? 'opacity-0' : 'opacity-100'}`}
+      className={`z-overlay fixed inset-0 grid h-screen w-full place-items-center transition-opacity duration-500 ease-in-out ${fadeOut ? 'opacity-0' : 'opacity-100'}`}
       style={{ background: 'var(--first-gradient)' }}
     >
       <div

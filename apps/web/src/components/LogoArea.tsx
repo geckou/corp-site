@@ -33,7 +33,7 @@ export const LogoArea = ({
 
   return (
     <SectionContainer data-section-id={dataSectionId}>
-      <div ref={logoAreaRef} className="w-full h-full">
+      <div ref={logoAreaRef} className="h-full w-full">
         <div
           className={`logo-icon ${isOutOfView ? 'rise' : ''}`}
           onClick={() => onScrollTo('logo')}

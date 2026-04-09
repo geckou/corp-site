@@ -7,6 +7,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  env: {
+    BASIC_AUTH_CREDENTIALS: process.env.BASIC_AUTH_CREDENTIALS ?? '',
+  },
   outputFileTracingRoot: path.join(__dirname, '../../'),
   transpilePackages: ['@geckou/shared'],
   headers: async () => [

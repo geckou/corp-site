@@ -5,7 +5,7 @@ type BackgroundGlobeProps = {
 }
 
 export const BackgroundGlobe = ({ rotate }: BackgroundGlobeProps) => (
-  <div className="relative w-full aspect-square">
+  <div className="relative aspect-square w-full">
     {/* eslint-disable-next-line @next/next/no-img-element */}
     <img
       className="absolute top-0 m-auto"
