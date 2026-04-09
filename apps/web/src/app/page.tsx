@@ -182,14 +182,20 @@ export default function Home() {
   }, [updateCurrentSection])
 
   return (
-    <div ref={containerRef} className="h-svh overflow-auto overscroll-none scrollbar-hide">
+    <div
+      ref={containerRef}
+      className="scrollbar-hide h-svh overflow-auto overscroll-none"
+    >
       <TopBackground
         ref={topBackgroundRef}
-        className="fixed top-0 left-0"
+        className="fixed left-0 top-0"
         scrollPercentage={scrollPercentage}
       />
       <LogoArea data-section-id="logo" onScrollTo={scrollToSection} />
-      <div ref={sectionAreaRef} className="h-svh overflow-auto overscroll-none scrollbar-hide">
+      <div
+        ref={sectionAreaRef}
+        className="scrollbar-hide h-svh overflow-auto overscroll-none"
+      >
         {sections.map((section) => {
           const Component = SECTION_COMPONENTS[section.component]
           return Component ? (
@@ -201,7 +207,7 @@ export default function Home() {
             </div>
           ) : null
         })}
-        <div className="globe-wrap w-full max-w-contents h-globe-h mx-auto sticky bottom-0 overflow-hidden z-contents pointer-events-none">
+        <div className="globe-wrap max-w-contents h-globe-h z-contents pointer-events-none sticky bottom-0 mx-auto w-full overflow-hidden">
           <BackgroundGlobe rotate={globeRotateValue} />
         </div>
         <GlobalNav onScrollTo={scrollToSection} />

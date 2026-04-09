@@ -14,7 +14,7 @@ export const SectionContainer = ({
   'data-section-id': dataSectionId,
 }: SectionContainerProps) => (
   <section
-    className={`w-full h-svh relative ${className ?? ''}`}
+    className={`relative h-svh w-full ${className ?? ''}`}
     style={style}
     data-section-id={dataSectionId}
   >

@@ -116,7 +116,7 @@ export const SearchLight = ({
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 w-full h-full pointer-events-none transition-opacity duration-300"
+      className="pointer-events-none fixed inset-0 h-full w-full transition-opacity duration-300"
       style={{ opacity: isActive ? 1 : 0 }}
     />
   )

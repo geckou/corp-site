@@ -43,8 +43,8 @@ export const Facts = ({ isActivated, heading }: FactsProps) => {
   }, [isActivated])
 
   return (
-    <SectionContainer className="flex justify-end items-end p-sp-max max-sm:p-sp-large">
-      <dl className="flex flex-col text-right z-contents leading-[1.7] facts-list">
+    <SectionContainer className="p-sp-max max-sm:p-sp-large flex items-end justify-end">
+      <dl className="z-contents facts-list flex flex-col text-right leading-[1.7]">
         {FACTS.map((fact) => (
           <div key={fact.team} className="facts-list-item mb-sp-large">
             <dt className="mb-sp-small text-fs-small">{fact.team}</dt>

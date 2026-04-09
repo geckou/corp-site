@@ -16,7 +16,7 @@ export const About = ({ isActivated }: AboutProps) => {
   }, [isActivated])
 
   return (
-    <SectionContainer className="flex items-center justify-center flex-col gap-sp-large section-about">
+    <SectionContainer className="gap-sp-large section-about flex flex-col items-center justify-center">
       {isShownText && (
         <>
           <p className="about-text about-text-1 text-fs-large z-contents opacity-0">
