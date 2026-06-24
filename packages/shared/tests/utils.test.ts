@@ -4,22 +4,22 @@ import { formatDate, sleep } from '../src/utils'
 
 describe('formatDate', () => {
   it('YYYY-MM-DD 形式でフォーマットする', () => {
-    const date = new Date('2026-04-03T12:00:00Z')
+    const date = new Date(2026, 3, 3)
     expect(formatDate(date)).toBe('2026-04-03')
   })
 
   it('月・日が1桁でもゼロ埋めされる', () => {
-    const date = new Date('2026-01-05T00:00:00Z')
+    const date = new Date(2026, 0, 5)
     expect(formatDate(date)).toBe('2026-01-05')
   })
 
   it('年末の日付を正しく処理する', () => {
-    const date = new Date('2026-12-31T23:59:59Z')
+    const date = new Date(2026, 11, 31)
     expect(formatDate(date)).toBe('2026-12-31')
   })
 
   it('年始の日付を正しく処理する', () => {
-    const date = new Date('2026-01-01T00:00:00Z')
+    const date = new Date(2026, 0, 1)
     expect(formatDate(date)).toBe('2026-01-01')
   })
 })

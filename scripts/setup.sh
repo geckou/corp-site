@@ -92,12 +92,94 @@ fi
 
 echo ""
 
+# GitHub ブランチ保護ルール設定
+setup_branch_protection() {
+  if ! command -v gh &> /dev/null; then
+    echo "[skip] GitHub CLI (gh) がインストールされていません"
+    echo "  → brew install gh でインストール後、手動でブランチ保護を設定してください"
+    return
+  fi
+
+  if ! gh auth status &> /dev/null; then
+    echo "[skip] GitHub CLI が未認証です"
+    echo "  → gh auth login で認証後、再度 yarn setup を実行してください"
+    return
+  fi
+
+  REMOTE_URL=$(git remote get-url origin 2>/dev/null || true)
+  if [ -z "$REMOTE_URL" ]; then
+    echo "[skip] git remote origin が設定されていません"
+    return
+  fi
+
+  REPO=$(echo "$REMOTE_URL" | sed -E 's#.*github\.com[:/]##; s#/$##; s#\.git$##')
+  if [ -z "$REPO" ]; then
+    echo "[skip] GitHub リポジトリを検出できませんでした"
+    return
+  fi
+
+  echo "リポジトリ: $REPO"
+
+  if ! gh api "repos/$REPO/branches/production" &> /dev/null; then
+    echo "[skip] production ブランチがまだ存在しません"
+    return
+  fi
+
+  if gh api "repos/$REPO/branches/production/protection" &> /dev/null 2>&1; then
+    echo "[skip] production ブランチの保護ルールは設定済みです"
+    return
+  fi
+
+  read -p "production ブランチに保護ルールを設定しますか？ (Y/n): " PROTECT
+  if [ "$PROTECT" = "n" ] || [ "$PROTECT" = "N" ]; then
+    echo "[skip] ブランチ保護の設定をスキップしました"
+    return
+  fi
+
+  if gh api "repos/$REPO/branches/production/protection" \
+    --method PUT \
+    --input - <<'JSON' > /dev/null
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": ["CI / ci"]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 1
+  },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
+  then
+    echo "[done] production ブランチに保護ルールを設定しました"
+    echo "  - CI (ci ジョブ) パス必須 (strict: true)"
+    echo "  - PR 必須 + 1名以上のレビュー承認"
+    echo "  - 直接 push 禁止"
+    echo "  - force push 禁止"
+    echo "  - ブランチ削除禁止"
+  else
+    echo "[error] ブランチ保護の設定に失敗しました"
+    echo "  → リポジトリの Admin 権限があるか確認してください"
+  fi
+}
+
+setup_branch_protection
+
+echo ""
+
 # 依存インストール
 read -p "yarn install を実行しますか？ (Y/n): " INSTALL
 if [ "$INSTALL" != "n" ] && [ "$INSTALL" != "N" ]; then
   yarn install
   echo ""
   echo "[done] 依存関係をインストールしました"
+
+  # packages/shared の dist を生成
+  yarn workspace @geckou/shared build
+  echo "[done] packages/shared をビルドしました"
 fi
 
 echo ""
