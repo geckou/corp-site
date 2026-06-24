@@ -49,7 +49,8 @@ export async function apiClient<T>(
       const errorData = await response.json().catch(() => null)
       return {
         data: null,
-        error: errorData?.message || `HTTP ${response.status}`,
+        error:
+          errorData?.error || errorData?.message || `HTTP ${response.status}`,
         status: response.status,
       }
     }
