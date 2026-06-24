@@ -29,18 +29,24 @@ echo ""
 bash scripts/use-env.sh "${ENV}"
 echo ""
 
-# デプロイ前チェック
-echo "[check] 型チェック..."
-yarn type-check
+# デプロイ前チェック（CI 環境では check ジョブで済んでいるのでスキップ）
+if [ "${CI:-}" != "true" ]; then
+  echo "[check] 型チェック..."
+  yarn type-check
 
-echo "[check] Lint..."
-yarn lint
+  echo "[check] Lint..."
+  yarn lint
 
-echo "[check] テスト..."
-yarn test
+  echo "[check] テスト..."
+  yarn test
 
-echo "[check] ビルド..."
-yarn build
+  echo "[check] ビルド..."
+  yarn build
+else
+  echo "[skip] CI 環境のためチェックをスキップ（check ジョブで実行済み）"
+  echo "[build] ビルド..."
+  yarn build
+fi
 
 echo ""
 

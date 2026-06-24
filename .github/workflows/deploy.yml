@@ -44,12 +44,13 @@ jobs:
       - name: Build
         run: yarn build
 
-  # デプロイ（FIREBASE_SERVICE_ACCOUNT が設定されている場合のみ）
+  # デプロイ（FIREBASE_SERVICE_ACCOUNT または FIREBASE_TOKEN が設定されている場合のみ）
   deploy:
     runs-on: ubuntu-latest
     needs: check
     env:
       FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
     steps:
       # ブランチからデプロイ先の環境を決定し、シークレットの有無を判定
@@ -66,10 +67,14 @@ jobs:
           fi
 
           if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "auth=service-account" >> $GITHUB_OUTPUT
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          elif [ -n "$FIREBASE_TOKEN" ]; then
+            echo "auth=token" >> $GITHUB_OUTPUT
             echo "deploy=true" >> $GITHUB_OUTPUT
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
-            echo "FIREBASE_SERVICE_ACCOUNT が未設定のためデプロイをスキップします"
+            echo "FIREBASE_SERVICE_ACCOUNT / FIREBASE_TOKEN が未設定のためデプロイをスキップします"
           fi
 
       - uses: actions/checkout@v4
@@ -85,18 +90,33 @@ jobs:
         if: steps.env.outputs.deploy == 'true'
 
       # 環境別の .env をシークレットから生成
+      # シークレット名: ENV_FILE_{ENV} を優先、なければ ENV_{ENV}（旧形式）にフォールバック
       - name: Create .env.${{ steps.env.outputs.name }}
         if: steps.env.outputs.deploy == 'true'
         env:
-          ENV_FILE: ${{ secrets[format('ENV_FILE_{0}', steps.env.outputs.name)] }}
-        run: printf '%s\n' "$ENV_FILE" > .env.${{ steps.env.outputs.name }}
+          ENV_FILE_NEW: ${{ secrets[format('ENV_FILE_{0}', steps.env.outputs.name)] }}
+          ENV_FILE_LEGACY: ${{ secrets[format('ENV_{0}', steps.env.outputs.name)] }}
+        run: |
+          if [ -n "$ENV_FILE_NEW" ]; then
+            printf '%s\n' "$ENV_FILE_NEW" > .env.${{ steps.env.outputs.name }}
+          elif [ -n "$ENV_FILE_LEGACY" ]; then
+            printf '%s\n' "$ENV_FILE_LEGACY" > .env.${{ steps.env.outputs.name }}
+          else
+            echo "[warn] ENV_FILE_${{ steps.env.outputs.name }} / ENV_${{ steps.env.outputs.name }} が未設定です"
+            touch .env.${{ steps.env.outputs.name }}
+          fi
 
-      # サービスアカウントで認証（FIREBASE_TOKEN は firebase-tools v13+ で非推奨）
-      - name: Authenticate to Firebase
-        if: steps.env.outputs.deploy == 'true'
+      # サービスアカウントで認証（推奨）
+      - name: Authenticate with Service Account
+        if: steps.env.outputs.deploy == 'true' && steps.env.outputs.auth == 'service-account'
         run: |
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> $GITHUB_ENV
+
+      # FIREBASE_TOKEN で認証（レガシー、サービスアカウント移行まで）
+      - name: Authenticate with Token (legacy)
+        if: steps.env.outputs.deploy == 'true' && steps.env.outputs.auth == 'token'
+        run: echo "FIREBASE_TOKEN=$FIREBASE_TOKEN" >> $GITHUB_ENV
 
       - name: Install Firebase CLI
         if: steps.env.outputs.deploy == 'true'
