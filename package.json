@@ -13,6 +13,7 @@
     ]
   },
   "scripts": {
+    "preinstall": "node -e \"const fs=require('fs'),p=require('path');['apps/web','apps/functions','apps/mobile','packages/shared'].forEach(d=>{const nm=p.join(d,'node_modules');fs.mkdirSync(nm,{recursive:true})})\"",
     "setup": "bash scripts/setup.sh",
     "dev": "turbo dev",
     "dev:web": "rm -rf apps/web/.next && turbo dev --filter=@geckou/web...",
@@ -50,6 +51,7 @@
     "@firebase/rules-unit-testing": "^4.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "eslint": "^9.0.0",
     "firebase": "^11.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
@@ -59,6 +61,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "turbo": "^2.0.0",
+    "typescript-eslint": "^8.0.0",
     "vitest": "^3.0.0"
   }
 }
