@@ -12,6 +12,18 @@ if [ "$2" = "--only" ] && [ -n "$3" ]; then
   DEPLOY_ONLY="$3"
 fi
 
+# 環境 → Hosting サイト ID
+SITE_MAP_production="geckou-llc"
+SITE_MAP_staging="stg-geckou-llc"
+SITE_MAP_develop="dev-geckou-llc"
+SITE_VAR="SITE_MAP_${ENV}"
+SITE_NAME="${!SITE_VAR}"
+
+if [ -z "$SITE_NAME" ]; then
+  echo "[error] 未知の環境: ${ENV}（develop|staging|production のいずれか）"
+  exit 1
+fi
+
 # production は production ブランチからのみデプロイ可（FORCE_DEPLOY=1 で回避可能）
 if [ "$ENV" = "production" ] && [ "${FORCE_DEPLOY:-0}" != "1" ]; then
   CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
@@ -80,26 +92,15 @@ echo "[deploy] Firebase にデプロイ中..."
 # framework-backed hosting (firebase.json の frameworksBackend) に必要
 firebase experiments:enable webframeworks
 
-# framework hosting ターゲットを 1 つずつデプロイする。
-# 複数の framework-backed Hosting ターゲットを 1 回の firebase deploy に
-# 同梱すると Next アダプタが next build で停止（ハング）するため。
+# 対象環境の Hosting サイトのみデプロイする。
+# frameworksBackend 構成では全ターゲットが同一 source を共有するため、
+# 全ターゲットをループすると意図しない環境にも本番ビルドが配られる。
+# ENV に対応するサイト ID を直指定して 1 サイトのみデプロイする。
+# （複数の framework-backed ターゲットを 1 回の deploy に同梱すると
+#   Next アダプタが next build で停止するため、いずれにせよ単一指定が安全）
 deploy_hosting_per_target() {
-  local targets
-  targets=$(node -e "
-    const h = require('./firebase.json').hosting;
-    if (!h) process.exit(0);
-    const arr = Array.isArray(h) ? h : [h];
-    process.stdout.write(arr.map((x) => x.target || x.site || '').filter(Boolean).join(' '));
-  ")
-
-  if [ -z "$targets" ]; then
-    firebase deploy --only hosting --force
-  else
-    for t in $targets; do
-      echo "[deploy] hosting:${t}..."
-      firebase deploy --only "hosting:${t}" --force
-    done
-  fi
+  echo "[deploy] hosting:${SITE_NAME}..."
+  firebase deploy --only "hosting:${SITE_NAME}" --force
 }
 
 case "$DEPLOY_ONLY" in
@@ -117,11 +118,6 @@ case "$DEPLOY_ONLY" in
 esac
 
 # SSR 関数の .env にアプリ環境変数をマージ（frameworksBackend が自動生成する .env に不足分を追記）
-SITE_MAP_production="geckou-llc"
-SITE_MAP_staging="stg-geckou-llc"
-SITE_MAP_develop="dev-geckou-llc"
-SITE_VAR="SITE_MAP_${ENV}"
-SITE_NAME="${!SITE_VAR}"
 SSR_ENV=".firebase/${SITE_NAME}/functions/.env"
 
 if [ -f "$SSR_ENV" ] && [ -f ".env.${ENV}" ]; then
