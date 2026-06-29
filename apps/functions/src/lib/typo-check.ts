@@ -58,13 +58,11 @@ export async function handleTypoCheck(req: Request, res: Response) {
     typeof message !== 'string' ||
     !message
   ) {
-    res
-      .status(400)
-      .json({
-        ok: false,
-        error:
-          'Invalid request: fields.email, fields.name, and fields.message are required strings',
-      })
+    res.status(400).json({
+      ok: false,
+      error:
+        'Invalid request: fields.email, fields.name, and fields.message are required strings',
+    })
     return
   }
 
