@@ -8,7 +8,6 @@ type OpenAIResponse = {
   }>
 }
 
-const TYPO_CHECK_API_KEY = process.env.TYPO_CHECK_API_KEY
 const SYSTEM_PROMPT = `あなたは入力フォーム（メールアドレス、氏名、問い合わせ本文）のタイポ（打ち間違い）を判定する専門家です。
 ユーザーから入力データを受け取り、すべてのフィールドを独立して詳細にチェックし、誤字脱字や不自然な表記がないか判定してください。
 
@@ -41,9 +40,33 @@ const SYSTEM_PROMPT = `あなたは入力フォーム（メールアドレス、
 }`
 
 export async function handleTypoCheck(req: Request, res: Response) {
-  const { body } = req
-  const { fields } = body
-  const { email, name, message } = fields
+  const TYPO_CHECK_API_KEY = process.env.TYPO_CHECK_API_KEY
+  if (!TYPO_CHECK_API_KEY) {
+    console.error('TYPO_CHECK_API_KEY is not set')
+    res.status(500).json({ ok: false, error: 'Server configuration error' })
+    return
+  }
+
+  const fields = req.body?.fields
+  const { email, name, message } = fields ?? {}
+
+  if (
+    typeof email !== 'string' ||
+    !email ||
+    typeof name !== 'string' ||
+    !name ||
+    typeof message !== 'string' ||
+    !message
+  ) {
+    res
+      .status(400)
+      .json({
+        ok: false,
+        error:
+          'Invalid request: fields.email, fields.name, and fields.message are required strings',
+      })
+    return
+  }
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -80,9 +103,6 @@ export async function handleTypoCheck(req: Request, res: Response) {
     }
 
     const data = (await response.json()) as OpenAIResponse
-    console.log('OpenAI API response:')
-    console.dir(data.choices[0].message.content, { depth: null })
-
     const typoCheckResult = data.choices[0].message.content
 
     const result = JSON.parse(typoCheckResult)

@@ -124,6 +124,62 @@ describe('POST /contact/typo-check', () => {
   })
 
   describe('エラー系', () => {
+    it('TYPO_CHECK_API_KEY が未設定の場合、500 を返す', async () => {
+      vi.stubEnv('TYPO_CHECK_API_KEY', '')
+
+      const req = createMockRequest({
+        fields: {
+          email: 'test@example.com',
+          name: '山田 太郎',
+          message: 'お問い合わせです。',
+        },
+      })
+      const res = createMockResponse()
+
+      await handleTypoCheck(req, res as unknown as Response)
+
+      expect(res.statusCode).toBe(500)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('fields が存在しない場合、400 を返す', async () => {
+      const req = createMockRequest({})
+      const res = createMockResponse()
+
+      await handleTypoCheck(req, res as unknown as Response)
+
+      expect(res.statusCode).toBe(400)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('fields の一部が欠けている場合、400 を返す', async () => {
+      const req = createMockRequest({
+        fields: { email: 'test@example.com', name: '山田 太郎' },
+      })
+      const res = createMockResponse()
+
+      await handleTypoCheck(req, res as unknown as Response)
+
+      expect(res.statusCode).toBe(400)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('fields の値が文字列でない場合、400 を返す', async () => {
+      const req = createMockRequest({
+        fields: {
+          email: 123,
+          name: '山田 太郎',
+          message: 'お問い合わせです。',
+        },
+      })
+      const res = createMockResponse()
+
+      await handleTypoCheck(req, res as unknown as Response)
+
+      expect(res.statusCode).toBe(400)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
     it('上流 AI が 5xx を返した場合、502 ではなく 500 を返す（フォールバック）', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,

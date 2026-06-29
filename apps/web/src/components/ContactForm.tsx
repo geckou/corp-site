@@ -80,10 +80,10 @@ export const ContactForm = ({
       const proceed = confirm(
         `入力内容にタイポの可能性があります:\n${issueTextFormatter(issues)}\n\nこのまま送信しますか？`
       )
-      if (proceed) {
-        formRef.current?.submit()
-      }
+      if (!proceed) return
     }
+
+    formRef.current?.submit()
   }
 
   return (
