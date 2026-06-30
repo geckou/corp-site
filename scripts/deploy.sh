@@ -92,15 +92,17 @@ echo "[deploy] Firebase にデプロイ中..."
 # framework-backed hosting (firebase.json の frameworksBackend) に必要
 firebase experiments:enable webframeworks
 
-# 対象環境の Hosting サイトのみデプロイする。
+# 対象環境の Hosting ターゲットのみデプロイする。
 # frameworksBackend 構成では全ターゲットが同一 source を共有するため、
 # 全ターゲットをループすると意図しない環境にも本番ビルドが配られる。
-# ENV に対応するサイト ID を直指定して 1 サイトのみデプロイする。
+# ENV に対応するターゲット名（firebase.json の target / .firebaserc のマッピング名）を
+# 直指定して 1 ターゲットのみデプロイする。サイト ID（SITE_NAME）ではなく
+# ターゲット名を渡す点に注意（サイト ID では firebase が未検出となる）。
 # （複数の framework-backed ターゲットを 1 回の deploy に同梱すると
 #   Next アダプタが next build で停止するため、いずれにせよ単一指定が安全）
 deploy_hosting_per_target() {
-  echo "[deploy] hosting:${SITE_NAME}..."
-  firebase deploy --only "hosting:${SITE_NAME}" --force
+  echo "[deploy] hosting:${ENV} (${SITE_NAME})..."
+  firebase deploy --only "hosting:${ENV}" --force
 }
 
 case "$DEPLOY_ONLY" in
