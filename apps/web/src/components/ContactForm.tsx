@@ -50,11 +50,6 @@ export const ContactForm = ({
   const handleSubmit: React.SubmitEventHandler<HTMLFormElement> = async (e) => {
     e.preventDefault()
 
-    if (!enableTypoCheck) {
-      formRef.current?.submit()
-      return
-    }
-
     const [fetchError, res] = await safeFetchWithErrors(
       apiClient<TypoCheckResponse>('/contact/typo-check', {
         method: 'POST',
@@ -90,9 +85,9 @@ export const ContactForm = ({
     <form
       ref={formRef}
       method="post"
-      action="https://hyperform.jp/api/zbvrBVp1"
+      action="https://hyperform.jp/api/rZXPtamT"
       className="gap-sp-large contact-form flex w-full flex-col"
-      onSubmit={handleSubmit}
+      onSubmit={enableTypoCheck ? handleSubmit : undefined}
     >
       {inputItems.map((item, index) => (
         <fieldset
