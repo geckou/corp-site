@@ -1,13 +1,30 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { apiClient } from '@/lib/api-client'
+import { safeFetchWithErrors } from '@/lib/safe-fetch'
 
 type ContactFormProps = {
   isActive: boolean
+  enableTypoCheck?: boolean
 }
 
-export const ContactForm = ({ isActive }: ContactFormProps) => {
+type TypoCheckResponse = {
+  ok: boolean
+  issues: Array<{
+    field: string
+    original: string
+    suggestion: string
+    reason: string
+  }>
+}
+
+export const ContactForm = ({
+  isActive,
+  enableTypoCheck,
+}: ContactFormProps) => {
   const [values, setValues] = useState({ email: '', name: '', message: '' })
+  const formRef = useRef<HTMLFormElement>(null)
 
   const inputItems = [
     { key: 'email', label: 'EMAIL', type: 'email' },
@@ -21,11 +38,56 @@ export const ContactForm = ({ isActive }: ContactFormProps) => {
     setValues((prev) => ({ ...prev, [key]: value }))
   }
 
+  const issueTextFormatter = (issues: TypoCheckResponse['issues']) => {
+    return issues
+      .map(
+        (issue) =>
+          `${issue.field}: ${issue.original} → ${issue.suggestion} (${issue.reason})`
+      )
+      .join('\n')
+  }
+
+  const handleSubmit: React.SubmitEventHandler<HTMLFormElement> = async (e) => {
+    e.preventDefault()
+
+    const [fetchError, res] = await safeFetchWithErrors(
+      apiClient<TypoCheckResponse>('/contact/typo-check', {
+        method: 'POST',
+        authenticated: false,
+        body: { fields: { ...values } },
+      })
+    )
+
+    if (fetchError) {
+      console.error('Error during typo check:', fetchError)
+      formRef.current?.submit()
+      return
+    }
+
+    if (res.error || !res.data) {
+      console.error('API error during typo check:', res.error)
+      formRef.current?.submit()
+      return
+    }
+
+    const { ok, issues } = res.data
+    if (!ok) {
+      const proceed = confirm(
+        `入力内容にタイポの可能性があります:\n${issueTextFormatter(issues)}\n\nこのまま送信しますか？`
+      )
+      if (!proceed) return
+    }
+
+    formRef.current?.submit()
+  }
+
   return (
     <form
+      ref={formRef}
       method="post"
-      action="https://hyperform.jp/api/zbvrBVp1"
+      action="https://hyperform.jp/api/rZXPtamT"
       className="gap-sp-large contact-form flex w-full flex-col"
+      onSubmit={enableTypoCheck ? handleSubmit : undefined}
     >
       {inputItems.map((item, index) => (
         <fieldset

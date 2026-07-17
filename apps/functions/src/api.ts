@@ -3,6 +3,7 @@ import express from 'express'
 import { onRequest } from 'firebase-functions/v2/https'
 
 import { requireAuth, type AuthenticatedRequest } from './lib/auth-middleware'
+import { handleTypoCheck } from './lib/typo-check'
 import { handleRevenueCatWebhook } from './revenuecat-webhook'
 
 const app = express()
@@ -18,6 +19,8 @@ app.use(cors({ origin: allowedOrigins.length > 0 ? allowedOrigins : true }))
 app.use(express.json())
 
 app.post('/webhooks/revenuecat', handleRevenueCatWebhook)
+
+app.post('/contact/typo-check', handleTypoCheck)
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' })
