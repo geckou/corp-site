@@ -40,9 +40,9 @@ function evaluateBasicAuth(
 // 認証が必要なパス
 const PROTECTED_PATHS = ['/dashboard']
 
-// 専用 Basic 認証で保護するパス（環境変数ごとに独立）
-const PATH_BASIC_AUTH: { path: string; envKey: string }[] = [
-  { path: '/contact-test', envKey: 'CONTACT_TEST_AUTH' },
+// 専用 Basic 認証で保護するパス
+const PATH_BASIC_AUTH = [
+  { path: '/contact-test', credentials: () => process.env.CONTACT_TEST_AUTH },
 ]
 
 export function middleware(request: NextRequest) {
@@ -52,10 +52,13 @@ export function middleware(request: NextRequest) {
   const pathAuth = PATH_BASIC_AUTH.find((p) => pathname.startsWith(p.path))
 
   if (pathAuth) {
-    const credentials = process.env[pathAuth.envKey]
+    const credentials = pathAuth.credentials()
 
     if (!credentials) {
-      return new NextResponse('Not Found', { status: 404 })
+      return new NextResponse('Not Found', {
+        status: 404,
+        headers: { 'Cache-Control': NO_STORE_CACHE_CONTROL },
+      })
     }
 
     if (!matchBasicAuth(request, credentials)) {
