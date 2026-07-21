@@ -72,8 +72,18 @@ cleanup_workspace_deps() {
   cp "${BACKUP_DIR}/web-package.json" apps/web/package.json
   cp "${BACKUP_DIR}/functions-package.json" apps/functions/package.json
   rm -rf "${BACKUP_DIR}"
+  rm -f apps/web/.env.production
 }
 trap cleanup_workspace_deps EXIT
+
+# Cloud Build 用に NEXT_PUBLIC_* 変数を apps/web/.env.production へ書き出す
+# frameworksBackend は Cloud Build で再ビルドするため .env.local が使えない
+grep '^NEXT_PUBLIC_' ".env.${ENV}" > apps/web/.env.production 2>/dev/null || true
+if [ ! -s apps/web/.env.production ]; then
+  echo "[error] .env.${ENV} に NEXT_PUBLIC_* 変数がありません"
+  exit 1
+fi
+echo "[done] NEXT_PUBLIC_* → apps/web/.env.production"
 
 echo "[predeploy] workspace 依存を一時削除..."
 node -e "
