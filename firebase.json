@@ -18,7 +18,8 @@
         "**/.git/**",
         "**/.next/**",
         "**/.turbo/**",
-        "**/.env.local"
+        "**/.env.local",
+        "**/.env.*.local"
       ],
       "frameworksBackend": {
         "region": "asia-northeast1"
@@ -33,7 +34,8 @@
         "**/.git/**",
         "**/.next/**",
         "**/.turbo/**",
-        "**/.env.local"
+        "**/.env.local",
+        "**/.env.*.local"
       ],
       "frameworksBackend": {
         "region": "asia-northeast1"
@@ -48,7 +50,8 @@
         "**/.git/**",
         "**/.next/**",
         "**/.turbo/**",
-        "**/.env.local"
+        "**/.env.local",
+        "**/.env.*.local"
       ],
       "frameworksBackend": {
         "region": "asia-northeast1"
