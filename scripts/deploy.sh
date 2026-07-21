@@ -72,18 +72,28 @@ cleanup_workspace_deps() {
   cp "${BACKUP_DIR}/web-package.json" apps/web/package.json
   cp "${BACKUP_DIR}/functions-package.json" apps/functions/package.json
   rm -rf "${BACKUP_DIR}"
-  rm -f apps/web/.env.production
+  rm -f apps/web/build-env.json
 }
 trap cleanup_workspace_deps EXIT
 
-# Cloud Build 用に NEXT_PUBLIC_* 変数を apps/web/.env.production へ書き出す
-# frameworksBackend は Cloud Build で再ビルドするため .env.local が使えない
-grep '^NEXT_PUBLIC_' ".env.${ENV}" > apps/web/.env.production 2>/dev/null || true
-if [ ! -s apps/web/.env.production ]; then
-  echo "[error] .env.${ENV} に NEXT_PUBLIC_* 変数がありません"
-  exit 1
-fi
-echo "[done] NEXT_PUBLIC_* → apps/web/.env.production"
+# Cloud Build 用に NEXT_PUBLIC_* 変数を apps/web/build-env.json へ書き出す
+# frameworksBackend は Cloud Build で再ビルドするが dot ファイルがアップロードされないため
+# next.config.ts が読み込める JSON 形式で書き出す
+node -e "
+  const fs = require('fs');
+  const src = fs.readFileSync('.env.${ENV}', 'utf8');
+  const vars = {};
+  for (const line of src.split('\n')) {
+    const m = line.match(/^(NEXT_PUBLIC_\w+)=(.*)$/);
+    if (m) vars[m[1]] = m[2];
+  }
+  if (Object.keys(vars).length === 0) {
+    console.error('[error] .env.${ENV} に NEXT_PUBLIC_* 変数がありません');
+    process.exit(1);
+  }
+  fs.writeFileSync('apps/web/build-env.json', JSON.stringify(vars, null, 2) + '\n');
+"
+echo "[done] NEXT_PUBLIC_* → apps/web/build-env.json"
 
 echo "[predeploy] workspace 依存を一時削除..."
 node -e "

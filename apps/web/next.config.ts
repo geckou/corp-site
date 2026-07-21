@@ -1,6 +1,21 @@
+import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 
 import type { NextConfig } from 'next'
+
+// Cloud Build 用: dot ファイル（.env.production）がアップロードされない場合の代替
+const buildEnvPath = path.join(__dirname, 'build-env.json')
+if (existsSync(buildEnvPath)) {
+  const vars = JSON.parse(readFileSync(buildEnvPath, 'utf8')) as Record<
+    string,
+    string
+  >
+  for (const [key, value] of Object.entries(vars)) {
+    if (!process.env[key]) {
+      process.env[key] = value
+    }
+  }
+}
 
 const nextConfig: NextConfig = {
   output: 'standalone',
