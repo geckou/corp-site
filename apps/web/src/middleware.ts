@@ -49,7 +49,9 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // パス専用 Basic 認証（サイト全体の Basic 認証とは独立）
-  const pathAuth = PATH_BASIC_AUTH.find((p) => pathname.startsWith(p.path))
+  const pathAuth = PATH_BASIC_AUTH.find(
+    (p) => pathname === p.path || pathname.startsWith(`${p.path}/`)
+  )
 
   if (pathAuth) {
     const credentials = pathAuth.credentials()
