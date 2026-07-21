@@ -39,6 +39,11 @@ echo ""
 
 # 環境の切り替え
 bash scripts/use-env.sh "${ENV}"
+
+# Cloud Build 用に NEXT_PUBLIC_* 変数を apps/web/.env.production へ書き出す
+# frameworksBackend は Cloud Build で再ビルドするため .env.local が使えない
+grep '^NEXT_PUBLIC_' ".env.${ENV}" > apps/web/.env.production 2>/dev/null || true
+echo "[done] NEXT_PUBLIC_* → apps/web/.env.production"
 echo ""
 
 # デプロイ前チェック（CI 環境では check ジョブで済んでいるのでスキップ）
@@ -72,6 +77,7 @@ cleanup_workspace_deps() {
   cp "${BACKUP_DIR}/web-package.json" apps/web/package.json
   cp "${BACKUP_DIR}/functions-package.json" apps/functions/package.json
   rm -rf "${BACKUP_DIR}"
+  rm -f apps/web/.env.production
 }
 trap cleanup_workspace_deps EXIT
 
