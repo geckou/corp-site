@@ -32,13 +32,16 @@ function createMockResponse(): Response & {
   return res as unknown as Response & { statusCode: number; body: unknown }
 }
 
-// 上流 AI 判定 API のレスポンスを模擬する（契約: { ok, issues }）。
-function makeUpstreamResponse(payload: unknown, status = 200) {
+function makeOpenAIResponse(content: object | string, status = 200) {
+  const jsonStr =
+    typeof content === 'string' ? content : JSON.stringify(content)
   return {
     ok: status >= 200 && status < 300,
     status,
-    json: vi.fn().mockResolvedValue(payload),
-    text: vi.fn().mockResolvedValue(JSON.stringify(payload)),
+    json: vi.fn().mockResolvedValue({
+      choices: [{ message: { content: jsonStr } }],
+    }),
+    text: vi.fn().mockResolvedValue(jsonStr),
   }
 }
 
@@ -53,7 +56,6 @@ const validFields = {
 describe('POST /contact/typo-check', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubEnv('TYPO_CHECK_API_URL', 'https://typo-check.example.com/check')
     vi.stubEnv('TYPO_CHECK_API_KEY', 'test-api-key')
     vi.stubEnv('ALLOWED_ORIGINS', '')
   })
@@ -61,7 +63,7 @@ describe('POST /contact/typo-check', () => {
   describe('正常系', () => {
     it('タイポなし: ok=true かつ issues=[] を返す', async () => {
       mockFetch.mockResolvedValueOnce(
-        makeUpstreamResponse({ ok: true, issues: [] })
+        makeOpenAIResponse({ ok: true, issues: [] })
       )
 
       const req = createMockRequest(validFields)
@@ -81,9 +83,7 @@ describe('POST /contact/typo-check', () => {
           reason: 'ドメインの綴り誤り',
         },
       ]
-      mockFetch.mockResolvedValueOnce(
-        makeUpstreamResponse({ ok: false, issues })
-      )
+      mockFetch.mockResolvedValueOnce(makeOpenAIResponse({ ok: false, issues }))
 
       const req = createMockRequest({
         fields: {
@@ -114,9 +114,7 @@ describe('POST /contact/typo-check', () => {
           reason: '打ち間違い',
         },
       ]
-      mockFetch.mockResolvedValueOnce(
-        makeUpstreamResponse({ ok: false, issues })
-      )
+      mockFetch.mockResolvedValueOnce(makeOpenAIResponse({ ok: false, issues }))
 
       const req = createMockRequest({
         fields: {
@@ -130,6 +128,27 @@ describe('POST /contact/typo-check', () => {
       await handleTypoCheck(req, res as unknown as Response)
 
       expect((res.body as { issues: unknown[] }).issues).toHaveLength(2)
+    })
+
+    it('OpenAI に gpt-4o-mini + json_object 形式で送信する', async () => {
+      mockFetch.mockResolvedValueOnce(
+        makeOpenAIResponse({ ok: true, issues: [] })
+      )
+
+      const req = createMockRequest(validFields)
+      const res = createMockResponse()
+
+      await handleTypoCheck(req, res as unknown as Response)
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.openai.com/v1/chat/completions',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"model":"gpt-4o-mini"'),
+        })
+      )
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body)
+      expect(body.response_format).toEqual({ type: 'json_object' })
     })
   })
 
@@ -148,10 +167,10 @@ describe('POST /contact/typo-check', () => {
       expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('許可リスト設定時、許可 Origin は転送される', async () => {
+    it('許可リスト設定時、許可 Origin は通過する', async () => {
       vi.stubEnv('ALLOWED_ORIGINS', 'https://example.com,http://localhost:3000')
       mockFetch.mockResolvedValueOnce(
-        makeUpstreamResponse({ ok: true, issues: [] })
+        makeOpenAIResponse({ ok: true, issues: [] })
       )
 
       const req = createMockRequest(validFields, {
@@ -165,10 +184,10 @@ describe('POST /contact/typo-check', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
     })
 
-    it('Origin が無くても許可ドメインの Referer なら転送される', async () => {
+    it('Origin が無くても許可ドメインの Referer なら通過する', async () => {
       vi.stubEnv('ALLOWED_ORIGINS', 'https://example.com')
       mockFetch.mockResolvedValueOnce(
-        makeUpstreamResponse({ ok: true, issues: [] })
+        makeOpenAIResponse({ ok: true, issues: [] })
       )
 
       const req = createMockRequest(validFields, {
@@ -183,18 +202,6 @@ describe('POST /contact/typo-check', () => {
   })
 
   describe('エラー系', () => {
-    it('TYPO_CHECK_API_URL が未設定の場合、500 を返す', async () => {
-      vi.stubEnv('TYPO_CHECK_API_URL', '')
-
-      const req = createMockRequest(validFields)
-      const res = createMockResponse()
-
-      await handleTypoCheck(req, res as unknown as Response)
-
-      expect(res.statusCode).toBe(500)
-      expect(mockFetch).not.toHaveBeenCalled()
-    })
-
     it('TYPO_CHECK_API_KEY が未設定の場合、500 を返す', async () => {
       vi.stubEnv('TYPO_CHECK_API_KEY', '')
 
@@ -245,10 +252,8 @@ describe('POST /contact/typo-check', () => {
       expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('上流 AI が 5xx を返した場合、502 を返す', async () => {
-      mockFetch.mockResolvedValueOnce(
-        makeUpstreamResponse({ error: 'Bad gateway' }, 502)
-      )
+    it('OpenAI が 5xx を返した場合、502 を返す', async () => {
+      mockFetch.mockResolvedValueOnce(makeOpenAIResponse('', 502))
 
       const req = createMockRequest(validFields)
       const res = createMockResponse()
@@ -260,22 +265,6 @@ describe('POST /contact/typo-check', () => {
 
     it('fetch 自体が例外を投げた場合（ネットワークエラー）、502 を返す', async () => {
       mockFetch.mockRejectedValueOnce(new Error('network error'))
-
-      const req = createMockRequest(validFields)
-      const res = createMockResponse()
-
-      await handleTypoCheck(req, res as unknown as Response)
-
-      expect(res.statusCode).toBe(502)
-    })
-
-    it('上流レスポンスが不正な JSON の場合、502 を返す', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockRejectedValue(new Error('invalid json')),
-        text: vi.fn().mockResolvedValue(''),
-      })
 
       const req = createMockRequest(validFields)
       const res = createMockResponse()
