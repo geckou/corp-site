@@ -12,15 +12,7 @@
     {
       "target": "production",
       "source": "apps/web",
-      "ignore": [
-        "firebase.json",
-        "**/node_modules/**",
-        "**/.git/**",
-        "**/.next/**",
-        "**/.turbo/**",
-        "**/.env.local",
-        "**/.env.*.local"
-      ],
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "frameworksBackend": {
         "region": "asia-northeast1"
       }
@@ -28,15 +20,7 @@
     {
       "target": "staging",
       "source": "apps/web",
-      "ignore": [
-        "firebase.json",
-        "**/node_modules/**",
-        "**/.git/**",
-        "**/.next/**",
-        "**/.turbo/**",
-        "**/.env.local",
-        "**/.env.*.local"
-      ],
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "frameworksBackend": {
         "region": "asia-northeast1"
       }
@@ -44,15 +28,7 @@
     {
       "target": "develop",
       "source": "apps/web",
-      "ignore": [
-        "firebase.json",
-        "**/node_modules/**",
-        "**/.git/**",
-        "**/.next/**",
-        "**/.turbo/**",
-        "**/.env.local",
-        "**/.env.*.local"
-      ],
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "frameworksBackend": {
         "region": "asia-northeast1"
       }
