@@ -78,7 +78,7 @@ export default function ContactTestForm() {
     <form
       ref={formRef}
       method="post"
-      action="https://hyperform.jp/api/rZXPtamT"
+      action="https://hyperform.jp/api/zbvrBVp1"
       onSubmit={handleSubmit}
       className="flex flex-col gap-4"
     >
