@@ -57,13 +57,18 @@ jobs:
       - name: Set environment
         id: env
         run: |
+          # name: .env.<環境名> や deploy.sh に渡す環境名（小文字）
+          # env_secret: .env の中身を保持するシークレット名（大文字）
           REF="${{ github.ref_name }}"
           if [ "$REF" = "production" ]; then
             echo "name=production" >> $GITHUB_OUTPUT
+            echo "env_secret=ENV_PRODUCTION" >> $GITHUB_OUTPUT
           elif [[ "$REF" == release/* ]] || [[ "$REF" == hotfix/* ]]; then
             echo "name=staging" >> $GITHUB_OUTPUT
+            echo "env_secret=ENV_STAGING" >> $GITHUB_OUTPUT
           else
             echo "name=develop" >> $GITHUB_OUTPUT
+            echo "env_secret=ENV_DEVELOP" >> $GITHUB_OUTPUT
           fi
 
           if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
@@ -90,21 +95,18 @@ jobs:
         if: steps.env.outputs.deploy == 'true'
 
       # 環境別の .env をシークレットから生成
-      # シークレット名: ENV_FILE_{ENV} を優先、なければ ENV_{ENV}（旧形式）にフォールバック
+      # シークレット名: ENV_DEVELOP / ENV_STAGING / ENV_PRODUCTION
       - name: Create .env.${{ steps.env.outputs.name }}
         if: steps.env.outputs.deploy == 'true'
         env:
-          ENV_FILE_NEW: ${{ secrets[format('ENV_FILE_{0}', steps.env.outputs.name)] }}
-          ENV_FILE_LEGACY: ${{ secrets[format('ENV_{0}', steps.env.outputs.name)] }}
+          ENV_FILE: ${{ secrets[steps.env.outputs.env_secret] }}
         run: |
-          if [ -n "$ENV_FILE_NEW" ]; then
-            printf '%s\n' "$ENV_FILE_NEW" > .env.${{ steps.env.outputs.name }}
-          elif [ -n "$ENV_FILE_LEGACY" ]; then
-            printf '%s\n' "$ENV_FILE_LEGACY" > .env.${{ steps.env.outputs.name }}
-          else
-            echo "[warn] ENV_FILE_${{ steps.env.outputs.name }} / ENV_${{ steps.env.outputs.name }} が未設定です"
-            touch .env.${{ steps.env.outputs.name }}
+          if [ -z "$ENV_FILE" ]; then
+            echo "[error] シークレット ${{ steps.env.outputs.env_secret }} が未設定です"
+            exit 1
           fi
+
+          printf '%s\n' "$ENV_FILE" > .env.${{ steps.env.outputs.name }}
 
       # サービスアカウントで認証（推奨）
       - name: Authenticate with Service Account
