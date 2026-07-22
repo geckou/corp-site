@@ -90,21 +90,18 @@ jobs:
         if: steps.env.outputs.deploy == 'true'
 
       # 環境別の .env をシークレットから生成
-      # シークレット名: ENV_FILE_{ENV} を優先、なければ ENV_{ENV}（旧形式）にフォールバック
+      # シークレット名: ENV_DEVELOP / ENV_STAGING / ENV_PRODUCTION
       - name: Create .env.${{ steps.env.outputs.name }}
         if: steps.env.outputs.deploy == 'true'
         env:
-          ENV_FILE_NEW: ${{ secrets[format('ENV_FILE_{0}', steps.env.outputs.name)] }}
-          ENV_FILE_LEGACY: ${{ secrets[format('ENV_{0}', steps.env.outputs.name)] }}
+          ENV_FILE: ${{ secrets[format('ENV_{0}', steps.env.outputs.name)] }}
         run: |
-          if [ -n "$ENV_FILE_NEW" ]; then
-            printf '%s\n' "$ENV_FILE_NEW" > .env.${{ steps.env.outputs.name }}
-          elif [ -n "$ENV_FILE_LEGACY" ]; then
-            printf '%s\n' "$ENV_FILE_LEGACY" > .env.${{ steps.env.outputs.name }}
-          else
-            echo "[warn] ENV_FILE_${{ steps.env.outputs.name }} / ENV_${{ steps.env.outputs.name }} が未設定です"
-            touch .env.${{ steps.env.outputs.name }}
+          if [ -z "$ENV_FILE" ]; then
+            echo "[error] シークレット ENV_${{ steps.env.outputs.name }} が未設定です"
+            exit 1
           fi
+
+          printf '%s\n' "$ENV_FILE" > .env.${{ steps.env.outputs.name }}
 
       # サービスアカウントで認証（推奨）
       - name: Authenticate with Service Account
