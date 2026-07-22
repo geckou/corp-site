@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Contact Test',
+  title: 'Contact Sample',
   robots: {
     index: false,
     follow: false,
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   },
 }
 
-export default function ContactTestLayout({
+export default function ContactSampleLayout({
   children,
 }: {
   children: React.ReactNode

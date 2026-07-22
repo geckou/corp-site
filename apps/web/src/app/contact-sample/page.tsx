@@ -1,6 +1,6 @@
-import ContactTestForm from './ContactTestForm'
+import ContactSampleForm from './ContactSampleForm'
 
-export default function ContactTestPage() {
+export default function ContactSamplePage() {
   return (
     <main
       className="p-8"
@@ -11,8 +11,8 @@ export default function ContactTestPage() {
       }}
     >
       <div className="mx-auto max-w-xl">
-        <h1 className="mb-4 text-xl">Contact Test</h1>
-        <ContactTestForm />
+        <h1 className="mb-4 text-xl">Contact Sample</h1>
+        <ContactSampleForm />
       </div>
     </main>
   )
