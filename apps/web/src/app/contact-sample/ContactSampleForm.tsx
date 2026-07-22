@@ -47,9 +47,24 @@ const buttonStyle: React.CSSProperties = {
 type FormState =
   | { status: 'editing' }
   | { status: 'checking' }
-  | { status: 'confirming'; issues: TypoIssue[] }
   | { status: 'sending' }
   | { status: 'sent' }
+
+// confirm ダイアログ用の文面を組み立てる
+function buildConfirmMessage(issues: TypoIssue[]): string {
+  const lines = issues.map((issue) => {
+    const label = fieldLabels[issue.field] ?? issue.field
+    return `・${label}: 「${issue.original}」は「${issue.suggestion}」の間違いではありませんか？（${issue.reason}）`
+  })
+
+  return [
+    '入力内容に間違いはありませんか？',
+    '',
+    ...lines,
+    '',
+    'このまま送信してもよろしいですか？',
+  ].join('\n')
+}
 
 export default function ContactSampleForm() {
   const [values, setValues] = useState({ email: '', name: '', message: '' })
@@ -91,7 +106,12 @@ export default function ContactSampleForm() {
       return
     }
 
-    setState({ status: 'confirming', issues })
+    if (window.confirm(buildConfirmMessage(issues))) {
+      await send()
+      return
+    }
+
+    setState({ status: 'editing' })
   }
 
   const isBusy = state.status === 'checking' || state.status === 'sending'
@@ -175,57 +195,6 @@ export default function ContactSampleForm() {
               : '送信する'}
         </button>
       </form>
-
-      {state.status === 'confirming' && (
-        <div
-          role="alertdialog"
-          aria-labelledby="confirm_title"
-          style={{
-            padding: '16px',
-            backgroundColor: '#fef9c3',
-            color: '#000',
-            borderRadius: '4px',
-          }}
-        >
-          <p id="confirm_title" style={{ fontWeight: 'bold' }}>
-            入力内容に間違いはありませんか？
-          </p>
-
-          <ul
-            style={{ listStyle: 'disc', paddingLeft: '20px', margin: '12px 0' }}
-          >
-            {state.issues.map((issue, i) => (
-              <li key={i} style={{ marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.875em', opacity: 0.7 }}>
-                  {fieldLabels[issue.field] ?? issue.field}
-                </span>
-                <br />「{issue.original}」は「{issue.suggestion}
-                」の間違いではありませんか？
-                <br />
-                <span style={{ fontSize: '0.875em', opacity: 0.7 }}>
-                  {issue.reason}
-                </span>
-              </li>
-            ))}
-          </ul>
-
-          <p>このまま送信してもよろしいですか？</p>
-
-          <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-            <button type="button" onClick={send} style={buttonStyle}>
-              このまま送信する
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setState({ status: 'editing' })}
-              style={buttonStyle}
-            >
-              修正する
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
