@@ -1,0 +1,17 @@
+// 依存更新（Renovate）の設定。
+//
+// ルール本体はテンプレート（geckou/project-starter）のプリセットにあり、
+// ここは参照だけを持つ。ルールを直すとテンプレート側の1コミットで届く。
+//
+// 前提: Renovate の GitHub App がこのリポジトリにインストールされていること。
+// 脆弱性の PR を受け取るには Dependency graph と Dependabot alerts の有効化も要る。
+//
+// 詳細はテンプレートの .claude/docs/dependencies.md。
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'github>geckou/project-starter//renovate/default',
+    // Expo 系の更新ルール（apps/mobile があるため）
+    'github>geckou/project-starter//renovate/mobile',
+  ],
+}

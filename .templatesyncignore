@@ -1,0 +1,8 @@
+# Template Sync の対象外にするファイル。
+#
+# 注: このリポジトリにはまだ Template Sync（.github/workflows/template-sync.yml）が
+# 設定されていない。設定する際は、テンプレート側の .templatesyncignore を参考に
+# apps/ packages/ 環境設定などの除外も追加すること。
+
+# CI はテンプレートを参照する形にしたため、実体で上書きされないようにする
+.github/workflows/ci.yml
