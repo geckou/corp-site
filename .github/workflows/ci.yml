@@ -16,6 +16,7 @@ on:
       - '**/*.md'
       - '.claude/docs/**'
       - '.claude/skills/**'
+      - '.claude/launch.json'
       - '.vscode/**'
       - '.editorconfig'
       - 'LICENSE'
