@@ -4,12 +4,21 @@ name: CI
 # ファイルをコピーしないので、テンプレート側の修正が取り込み作業ゼロで届く。
 # 層構成（mobile / firebase の有無）は呼ばれた側が実ファイルを見て判定する。
 # 詳細はテンプレートの .claude/docs/git-workflow.md「CI の配布（reusable workflow）」。
+#
+# push では回さない。production への push は deploy.yml の check ジョブが
+# 同じ検査（type-check / lint / format / test / build）を通してからデプロイする。
 
 on:
-  push:
-    branches: [production]
   pull_request:
     branches: [production, 'release/**']
+    # アプリの動作に影響しない変更では回さない（Actions 分の節約）
+    paths-ignore:
+      - '**/*.md'
+      - '.claude/docs/**'
+      - '.claude/skills/**'
+      - '.vscode/**'
+      - '.editorconfig'
+      - 'LICENSE'
 
 jobs:
   ci:
