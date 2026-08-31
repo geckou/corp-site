@@ -1,39 +1,16 @@
 name: CI
 
+# チェックの中身はテンプレート（geckou/project-starter）を参照する。
+# ファイルをコピーしないので、テンプレート側の修正が取り込み作業ゼロで届く。
+# 層構成（mobile / firebase の有無）は呼ばれた側が実ファイルを見て判定する。
+# 詳細はテンプレートの .claude/docs/git-workflow.md「CI の配布（reusable workflow）」。
+
 on:
   push:
     branches: [production]
   pull_request:
     branches: [production, 'release/**']
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   ci:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'yarn'
-
-      - run: yarn install --frozen-lockfile
-
-      - name: Type Check
-        run: yarn type-check
-
-      - name: Lint
-        run: yarn lint
-
-      - name: Format Check
-        run: yarn format:check
-
-      - name: Test
-        run: yarn test
-
-      - name: Build (Web)
-        run: yarn build --filter=@geckou/web
+    uses: geckou/project-starter/.github/workflows/ci.yml@v1
