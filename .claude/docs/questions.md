@@ -30,78 +30,56 @@
 - 進めた範囲: 保留の手前までに済ませたこと（あれば）
 -->
 
-### Q-001 Node を 20 から 22 へ上げるか
-
-- 発生: 2026-09-08 / テンプレート（geckou/project-starter）への追従作業中
-- 種別: 依存
-- 状況: テンプレートは `.nvmrc` が 22、Functions も `nodejs22` に移っている。
-  このリポジトリは `.nvmrc` 20 / `firebase.json` の `runtime: nodejs20` /
-  `apps/functions` の `engines.node: 20` で揃っており、上げると Cloud Functions の
-  ランタイムが変わる（デプロイに影響する）。今回の同期では 20 のまま据え置き、
-  `.nvmrc` を `.templatesyncignore` に入れてテンプレート側の 22 で上書きされないようにした。
-- 選択肢:
-  - A) 22 へ上げる（推奨）— Node 20 は 2026-04 に EOL。テンプレートと CI の実行環境も揃う。
-    `.nvmrc` / `firebase.json` / `apps/functions/package.json` の 3 箇所と、
-    develop で 1 度デプロイしての動作確認がセット
-  - B) 20 のまま — 変更ゼロだが、EOL 後はセキュリティ更新が来ない
-- ブロック: なし（据え置きのままでも動く）。A を選ぶ場合はデプロイを伴うので別 PR にする
-
-### Q-002 Firestore ルールのテストを持つか
-
-- 発生: 2026-09-08 / テンプレートへの追従作業中
-- 種別: セキュリティ
-- 状況: `package.json` の `test:rules` が実在しない `tests/firestore-rules.test.ts` を
-  指しており、ルールテストが 1 件も無い（CI もテストの有無で判定しているため黙ってスキップされる）。
-  今回の同期ではテンプレートのルールテストを持ち込んでいない — テンプレート側は
-  課金層（`serverOnlyFields`）と Storage を前提にしており、このリポジトリの
-  `firestore.rules`（users のみ・Storage 無し）とは別物のため。
-- 選択肢:
-  - A) このリポジトリの `firestore.rules` に合わせて users の許可 / 拒否テストを書く（推奨）—
-    CLAUDE.md のテスト方針では必須。エミュレーターが要るので `scripts/test-rules.sh` も
-    Storage 抜きで持ってくる
-  - B) `test:rules` を消して、ルールテストを持たないことを明示する — Firestore を
-    実質使っていないなら整合はする
-- ブロック: DoD の「ルール許可 / 拒否のテストがある」が満たせない
-
-### Q-003 デプロイ経路をテンプレートに寄せるか
-
-- 発生: 2026-09-08 / テンプレートへの追従作業中
-- 種別: その他
-- 状況: `.github/workflows/deploy.yml` と `scripts/deploy.sh` だけ同期対象から外した。
-  このリポジトリ側に固有の対応が入っているため（Cloud Build 向けの
-  `NEXT_PUBLIC_*` → `apps/web/.env.production` 書き出し、SSR 関数の `.env` パッチ、
-  ENV に対応する Hosting ターゲットだけを配る）。テンプレートの実体で上書きすると
-  1 プロジェクト 3 サイト構成の全ターゲットへ配ってしまう。
-  副作用として、テンプレートが後から入れた改善（前回成功コミットからの差分で
-  デプロイ対象を絞る等）は届かない。
-- 選択肢:
-  - A) 当面このまま外しておく（推奨）— 本番デプロイ経路なので、寄せるなら
-    develop で通してからにしたい
-  - B) テンプレートの deploy.sh に上記 3 点を移植して同期対象へ戻す — 恒久的には
-    こちらだが、本番デプロイの検証を伴う
-  - C) テンプレート側に Issue を立てて、3 点をテンプレートへ還元する
-    （→ `.claude/docs/upstream-report.md`）
-- ブロック: なし。デプロイは現状のまま動く
-
-### Q-004 層マニフェスト（layers.json）を持つか
-
-- 発生: 2026-09-08 / テンプレートへの追従作業中
-- 種別: その他
-- 状況: このリポジトリは `layers.json` を持っていない。テンプレートは Template Sync で
-  取り込んだ差分から「この派生が採用していない層」を機械的に外す仕組み
-  （`scripts/sync-layers.mjs`）を持つが、マニフェストが無いとその段はスキップされる。
-  今回も課金層前提のドキュメント（billing.md・architecture.md）が入ってきたため手で外した。
-  同じことが同期のたびに起きる。
-- 選択肢:
-  - A) このリポジトリ用の `layers.json` を作る（推奨）— 採用しているのは
-    core + firebase + functions + mobile。`scripts/check-layers.mjs` が実態との
-    ずれを CI で検出してくれるようになる。作成の手間は 1 回
-  - B) 持たないまま、同期 PR のたびに手で外す — 毎週の作業が増える
-- ブロック: なし。ただし B のままだと Template Sync の PR レビューが重くなる
+（なし）
 
 ---
 
 ## 回答済み
+
+### Q-004 層マニフェスト（layers.json）を持つか
+
+- 回答: 2026-09-08 / **A（作る）を採用**
+- 判断の理由: 持たないと Template Sync が「採用していない層」を機械的に外せず、
+  同期 PR のたびに課金層前提のドキュメント・設定を手で外すことになる。作る手間は 1 回きり
+- 反映: Issue #33 で実施する（別ブランチ・別 PR。層まわりのスクリプトが入る #31 のマージ後）
+- 目標: `node scripts/check-layers.mjs` と `bash scripts/test-layers.sh` が通ること。
+  残っている `layer:billing:*` マーカーが外れていること。
+  `CLAUDE.md`「プロジェクト概要」の「`layers.json` は持っていない」の記述を直すこと
+
+### Q-002 Firestore ルールのテストを持つか
+
+- 回答: 2026-09-08 / **B（`test:rules` を消して、ルールテストを持たないことを明示する）を採用**
+- 判断の理由: このサイトは Firestore を実質使っていない。
+  使っていないもののテストを整備するより、持たない方針を明示するほうが実態に合う
+- 反映済み:
+  - `package.json` の `test:rules` を削除（実在しないルールテストのファイルを指していた）
+  - `CLAUDE.md`「テスト方針」の Firestore ルールの行を「テスト不要」に変更
+  - `.claude/hooks/config.sh` の `HOOK_WATCH_PATHS` を、
+    `firestore.rules` 変更時にエミュレーターでの手動確認を促す文言に変更
+  - テンプレートのルールテスト一式（`tests/` / `scripts/test-rules.sh` /
+    `firebase.rules-test.json`）は `.templatesyncignore` で同期対象外のまま
+- 再考の目安: Firestore に認証付きの読み書きを実際に持たせるとき。その時点で A に切り替える
+
+### Q-001 Node を 20 から 22 へ上げるか
+
+- 回答: 2026-09-08 / **A（22 へ上げる）を採用**
+- 判断の理由: Node 20 は 2026-04 に EOL。テンプレートも CI の実行環境も 22 で揃う。
+  `@commitlint/*` を v19 に固定している理由（v20 以降が Node >=22.12 を要求する）も消える
+- 反映: Issue #32 で実施する（別ブランチ・別 PR）。
+  Cloud Functions のランタイムが変わるため、develop で 1 度デプロイして確認するまでがセット
+- 対象: `.nvmrc` / `firebase.json` の `runtime` / `apps/functions` の `engines` と esbuild target /
+  `deploy.yml` の `setup-node` / `package.json` の commitlint 固定 / `.templatesyncignore` の `.nvmrc` 除外
+
+### Q-003 デプロイ経路をテンプレートに寄せるか
+
+- 回答: 2026-09-08 / **A（当面このまま同期対象から外しておく）を採用**
+- 判断の理由: 本番デプロイ経路なので、寄せるなら develop で通してからにしたい。
+  テンプレート側の実体で上書きすると 1 プロジェクト 3 サイト構成の全ターゲットへ配ってしまう
+- 反映済み: `.templatesyncignore` に `.github/workflows/deploy.yml` と `scripts/deploy.sh` を
+  除外として記載。理由もそこに書いた。
+  テンプレート側には geckou/project-starter#323 として報告済み
+  （全ターゲットへ配る問題、Cloud Build 向けの `NEXT_PUBLIC_*` 書き出し、SSR 関数の `.env` パッチ）
+- 再考の目安: geckou/project-starter#323 が直ったら、同期対象へ戻せるか見直す
 
 <!--
 ### Q-000 問い
@@ -109,5 +87,3 @@
 - 回答: YYYY-MM-DD / ユーザーの判断
 - 反映: 実装・spec.md への反映内容
 -->
-
-（なし）

@@ -24,8 +24,6 @@ apps/functions/.secret.local
 apps/mobile/.env.local
 .claude/docs/roadmap-archive.md
 packages/shared/dist/
-apps/web/.env.production
-tests/firestore-rules.test.ts
 scripts/test-rules.sh
 scripts/adopt-references.mjs
 scripts/test-adopt-references.sh
@@ -38,13 +36,12 @@ scripts/test-api-diff.sh
 .github/workflows/release-tag.yml
 '
 
-# 上の後半（apps/web/.env.production 以降）はこのリポジトリでの追加分。
+# 上の後半（scripts/test-rules.sh 以降）はこのリポジトリでの追加分。
 # テンプレート（geckou/project-starter）から同期してくるドキュメントは、
 # テンプレート本体だけが持つファイル（パッケージ公開・層検証まわり。
 # .templatesyncignore で同期対象外にしているもの）を参照している。
 # 派生プロジェクトには実在しないが参照切れではないため、ここで許可する。
-# apps/web/.env.production は scripts/deploy.sh が生成する gitignore 対象、
-# ルールテスト2件はまだ持っていないもの（→ .claude/docs/questions.md Q-002）。
+# scripts/test-rules.sh はルールテストを持たない方針のため置いていない（→ questions.md Q-002）。
 # このファイル自体は同期対象なので、テンプレート更新でこの追加分が消えたら戻すこと
 
 # 言及を拾う対象の接頭辞。これ以外（page.tsx のような汎用名や、

@@ -25,10 +25,10 @@ HOOK_CODE_EXTENSIONS=${HOOK_CODE_EXTENSIONS:-'ts|tsx|js|jsx|mjs|cjs|rules'}
 # 変更時に検証コマンドをリマインドするパスと、その文言。
 # 1行 = <パスパターン><TAB><メッセージ>。パスパターンはファイル・ディレクトリのどちらでもよく、
 # 絶対パス / リポジトリ相対パスの両方にマッチする。
-# このリポジトリはまだルールテストを持たない（→ .claude/docs/questions.md Q-002）ため、
+# このリポジトリはルールテストを持たない方針（→ .claude/docs/questions.md Q-002）なので、
 # firestore.rules の変更時はエミュレーターでの手動確認を促す
 HOOK_WATCH_PATHS=${HOOK_WATCH_PATHS:-'
-firestore.rules	firestore.rules が変更されました。yarn firebase:emulators で許可/拒否を確認してください（ルールテストは未整備）。
+firestore.rules	firestore.rules が変更されました。ルールテストは持たない方針のため、yarn firebase:emulators で許可/拒否を手で確認してください。
 packages/shared	packages/shared が変更されました。全 workspace に影響するため yarn type-check を実行してください。
 '}
 
