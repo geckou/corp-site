@@ -41,7 +41,7 @@ FUNCTIONS_ENV_KEYS=(
   # apps/functions/.env から消えるため、Functions が使う変数は必ず追記すること
   TYPO_CHECK_API_URL
   TYPO_CHECK_API_KEY
-  REVENUECAT_WEBHOOK_SECRET
+  REVENUECAT_WEBHOOK_AUTH
 )
 # layer:functions:end
 
