@@ -64,10 +64,6 @@ scripts/deploy.sh
 # ローカル起動の設定（nvm 経由・autoPort。開発機の都合に合わせてある）
 .claude/launch.json
 
-# Node のバージョン。Functions のランタイム（firebase.json の nodejs20）と
-# 揃えているため、テンプレートの 22 で上書きしない（→ .claude/docs/questions.md）
-.nvmrc
-
 # ルールテストの実体。このプロジェクトは Storage を使わず、firestore.rules も
 # テンプレート（課金層あり）とは別物なので、テンプレートのテストは同期しない
 tests/
