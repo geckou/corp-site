@@ -151,8 +151,12 @@ import { AuthProvider } from '@/components/auth/AuthProvider'
 
 ```bash
 node scripts/check-layers.mjs   # マニフェストと実態の一致（CI で実行）
-bash scripts/test-layers.sh     # 減算スクリプトの回帰テスト（CI で実行）
 ```
+
+減算スクリプトの回帰テスト（`scripts/test-layers.sh`）はこのリポジトリでは持っていない。
+テンプレート本体のリポジトリの形を前提にしており、参照方式の派生では成立しないため
+（→ `.templatesyncignore` / geckou/project-starter#326）。`ci.yml` の Layer Test ステップは
+ファイルの有無を見るので、無ければステップごとスキップされる。
 
 `check-layers.mjs` は `.github/workflows/docs-check.yml` が**全ての PR**で実行する。
 層マーカーは `apps/README.md` / `packages/README.md` にも入っており、`ci.yml` は `.md` だけの

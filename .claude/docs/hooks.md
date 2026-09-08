@@ -44,9 +44,12 @@ Stop フックは 4 つとも同じ `stop_hook_active` を受け取る。DoD が
 
 ## 層マニフェストを変更したら
 
-`layers.json` を変えたら `bash scripts/test-layers.sh`（減算の回帰テスト）と
-`node scripts/check-layers.mjs`（実態との一致）を実行する。
-どちらも node_modules に依存しないので `yarn install` なしで走る。CI でも実行される。
+`layers.json` を変えたら `node scripts/check-layers.mjs`（実態との一致）を実行する。
+node_modules に依存しないので `yarn install` なしで走る。CI（`docs-check.yml`）でも実行される。
+
+減算の回帰テスト（`scripts/test-layers.sh`）はこのリポジトリでは持っていない。
+テンプレート本体のリポジトリの形を前提にしており、参照方式の派生では成立しないため
+（→ `.templatesyncignore` / geckou/project-starter#326）。
 
 ## フックを変更したら
 
