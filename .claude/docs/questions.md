@@ -69,10 +69,11 @@
 - 回答: 2026-09-08 / **A（22 へ上げる）を採用**
 - 判断の理由: Node 20 は 2026-04 に EOL。テンプレートも CI の実行環境も 22 で揃う。
   `@commitlint/*` を v19 に固定している理由（v20 以降が Node >=22.12 を要求する）も消える
-- 反映: Issue #32 で実施する（別ブランチ・別 PR）。
-  Cloud Functions のランタイムが変わるため、develop で 1 度デプロイして確認するまでがセット
-- 対象: `.nvmrc` / `firebase.json` の `runtime` / `apps/functions` の `engines` と esbuild target /
-  `deploy.yml` の `setup-node` / `package.json` の commitlint 固定 / `.templatesyncignore` の `.nvmrc` 除外
+- 反映済み: Issue #32（別ブランチ・別 PR）で実施。
+  `.nvmrc` を 22 に、`firebase.json` の `runtime` を `nodejs22` に、`apps/functions` の
+  `engines` / esbuild target / `@types/node` を 22 系に、`deploy.yml` の `setup-node` を
+  `.nvmrc` 参照に変更。`@commitlint/*` の v19 固定（`resolutions` と `cli` のレンジ）を解除し、
+  `.templatesyncignore` から `.nvmrc` の除外を削除した
 
 ### Q-003 デプロイ経路をテンプレートに寄せるか
 
