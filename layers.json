@@ -1,0 +1,216 @@
+{
+  "$comment": "このリポジトリの層マニフェスト（機械可読な層定義）。scripts/check-layers.mjs が実態との整合検証に、scripts/remove-layer.mjs が減算に、scripts/sync-layers.mjs が Template Sync で取り込んだ差分からの外し直しに使う。仕様は .claude/docs/layers.md を参照。テンプレート（geckou/project-starter）のマニフェストから、このリポジトリに実在しないファイル・設定を落としたもの。",
+  "source": {
+    "repository": "https://github.com/geckou/project-starter",
+    "ref": "production",
+    "$comment": "加算（scripts/add-layer.mjs）が層の実体を取り寄せる元。--from でローカルのチェックアウトを渡せば clone しない"
+  },
+  "markers": {
+    "syntax": "<コメント記号> layer:<層名>[,<層名>...]:start / :end",
+    "rule": "列挙した層のいずれかが外れたら、その範囲を削除する（複数列挙は層の交点を表す）"
+  },
+  "layers": [
+    {
+      "name": "core",
+      "title": "LP が作れる最小構成",
+      "requires": null,
+      "removable": false,
+      "summary": "Next.js + Firebase Hosting + CI/deploy + 環境切替。apps/web の骨格・Basic 認証・デザイントークン・i18n・共有ユーティリティまで。ここから先は全て opt-in。",
+      "files": [
+        "apps/web/src/app/layout.tsx",
+        "apps/web/src/app/page.tsx",
+        "apps/web/src/app/error.tsx",
+        "apps/web/src/components/GoogleTagManager.tsx",
+        "apps/web/src/lib/sentry.ts",
+        "apps/web/src/middleware.ts",
+        "apps/web/src/styles/globals.css",
+        "packages/shared/src/types/index.ts",
+        "packages/shared/src/utils/index.ts",
+        "packages/shared/src/theme/index.ts",
+        "packages/shared/src/i18n/index.ts",
+        "scripts/deploy.sh",
+        "scripts/use-env.sh",
+        "turbo.json",
+        "renovate.json5"
+      ],
+      "env": [
+        "BASIC_AUTH_CREDENTIALS",
+        "CONTACT_TEST_AUTH",
+        "NEXT_PUBLIC_GTM_ID",
+        "NEXT_PUBLIC_SENTRY_DSN"
+      ],
+      "notes": [
+        "hosting.frameworksBackend の SSR 用関数は framework アダプタが自動生成して Cloud Functions (2nd gen) にデプロイする。リポジトリにコードを持たないため core に属する（functions 層とは別物）。",
+        "第0層の設定（ESLint / Prettier / commitlint）は npm パッケージ（@geckou/*-config）を参照する形なので、このリポジトリには実体が無い。テンプレートのマニフェストにある packages/*-config の files はここでは持たない。",
+        "Renovate のプリセットもテンプレート側（github>geckou/project-starter//renovate/*）を参照するため、renovate/ ディレクトリの実体は持たない。"
+      ]
+    },
+    {
+      "name": "firebase",
+      "title": "Auth + Firestore",
+      "requires": "core",
+      "removable": true,
+      "summary": "Firebase の認証・DB と、そのルール・エミュレーター・Admin SDK。外すと apps/web はサインインを持たない静的寄りの構成になる。",
+      "files": [
+        "apps/web/src/lib/firebase.ts",
+        "apps/web/src/lib/firebase-admin.ts",
+        "apps/web/src/app/login",
+        "apps/web/src/app/dashboard",
+        "apps/web/src/components/auth",
+        "packages/shared/src/firebase",
+        "packages/shared/src/firestore",
+        "packages/shared/src/storage",
+        "packages/shared/src/stores",
+        "packages/shared/tests/firestore.test.ts",
+        "packages/shared/tests/stores.test.ts",
+        "firestore.rules",
+        "firestore.indexes.json"
+      ],
+      "blocks": [".env.example"],
+      "deps": {
+        "package.json": ["firebase", "@firebase/rules-unit-testing"],
+        "apps/web/package.json": ["firebase", "firebase-admin"],
+        "packages/shared/package.json": ["firebase", "zustand"]
+      },
+      "json": {
+        "firebase.json": [
+          ["firestore"],
+          ["emulators", "firestore"],
+          ["emulators", "auth"]
+        ],
+        "packages/shared/package.json": [
+          ["exports", "./firebase"],
+          ["exports", "./firestore"],
+          ["exports", "./storage"],
+          ["exports", "./stores"]
+        ]
+      },
+      "replace": [
+        {
+          "file": ".claude/hooks/config.sh",
+          "find": "firestore.rules\tfirestore.rules が変更されました。ルールテストは持たない方針のため、yarn firebase:emulators で許可/拒否を手で確認してください。\n",
+          "with": ""
+        }
+      ],
+      "env": [
+        "NEXT_PUBLIC_FIREBASE_API_KEY",
+        "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
+        "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
+        "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET",
+        "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
+        "NEXT_PUBLIC_FIREBASE_APP_ID",
+        "FIREBASE_SERVICE_ACCOUNT_KEY",
+        "GOOGLE_APPLICATION_CREDENTIALS"
+      ],
+      "notes": [
+        "Storage は使っていない（storage.rules も firebase.json の storage 宣言も無い）。packages/shared/src/storage はクライアント側のヘルパーだけが残っている状態で、この層と一緒に外れる。",
+        "ルールテストは持たない方針（.claude/docs/questions.md Q-002）。テンプレートの firebase 層にある tests/ や scripts/test-rules.sh はここには無い。",
+        "apps/web と packages/shared のコードには層マーカーを入れていない。この層を外すときは files の削除に加えて、import の残りを手で追う必要がある。"
+      ]
+    },
+    {
+      "name": "functions",
+      "title": "apps/functions（自分で書く関数の器）",
+      "requires": "firebase",
+      "removable": true,
+      "summary": "API・Firestore / Auth トリガー・スケジュール実行の置き場所。問い合わせフォームのタイポ判定 API がここにある。外すとプロジェクトは API を持たない。",
+      "files": ["apps/functions", "apps/web/src/lib/api-client.ts"],
+      "blocks": [
+        ".env.example",
+        "scripts/use-env.sh",
+        "lint-staged.config.cjs"
+      ],
+      "scripts": {
+        "package.json": [
+          "dev:functions",
+          "build:functions",
+          "firebase:deploy:functions"
+        ]
+      },
+      "json": {
+        "firebase.json": [["functions"], ["emulators", "functions"]]
+      },
+      "env": [
+        "ALLOWED_ORIGINS",
+        "NEXT_PUBLIC_API_BASE_URL",
+        "SENTRY_DSN",
+        "TYPO_CHECK_API_URL",
+        "TYPO_CHECK_API_KEY"
+      ],
+      "notes": [
+        ".github/workflows/deploy.yml と scripts/deploy.sh はこのリポジトリ固有の内容になっており、Template Sync の対象外（.templatesyncignore）。テンプレートのマニフェストと違ってマーカーを入れていないため、この層を外すときはデプロイ経路を手で直す必要がある。",
+        "FCM 送信（apps/functions/src/lib/push-notifications.ts）はファイルとしてこの層にあるが、実利用は mobile 層が前提。"
+      ]
+    },
+    {
+      "name": "mobile",
+      "title": "Expo（iOS / Android）",
+      "requires": "functions",
+      "removable": true,
+      "summary": "apps/mobile 一式と、それが持ち込む nohoist・Renovate preset の Expo ルール。現在このサイトでは使っておらず、scaffold のまま残している。",
+      "files": ["apps/mobile"],
+      "blocks": [
+        ".env.example",
+        "scripts/use-env.sh",
+        "lint-staged.config.cjs",
+        "renovate.json5"
+      ],
+      "scripts": {
+        "package.json": ["dev:mobile"]
+      },
+      "json": {
+        "package.json": [["workspaces", "nohoist"]]
+      },
+      "env": [
+        "FIREBASE_API_KEY",
+        "FIREBASE_AUTH_DOMAIN",
+        "FIREBASE_PROJECT_ID",
+        "FIREBASE_STORAGE_BUCKET",
+        "FIREBASE_MESSAGING_SENDER_ID",
+        "FIREBASE_APP_ID",
+        "EXPO_PUBLIC_API_BASE_URL",
+        "EXPO_PUBLIC_SENTRY_DSN"
+      ],
+      "notes": [
+        "mobile が functions を要求するのは、API を Cloud Functions の1本に集約する規約（.claude/docs/architecture.md）を全構成で維持するため。",
+        "ESLint の Expo 用プリセットは @geckou/eslint-config/expo を参照する形なので、このリポジトリには実体が無い。"
+      ]
+    },
+    {
+      "name": "billing",
+      "title": "課金（RevenueCat のみ）",
+      "requires": "functions",
+      "removable": true,
+      "summary": "RevenueCat の配線と Webhook。テンプレートの billing 層と違い Stripe / @geckou/billing は入れていない。現在このサイトでは課金画面を持たず、scaffold の配線が残っている状態。",
+      "files": [
+        "apps/web/src/lib/revenuecat.ts",
+        "apps/mobile/src/lib/revenuecat.ts",
+        "apps/functions/src/revenuecat-webhook.ts",
+        "apps/functions/tests/revenuecat-webhook.test.ts"
+      ],
+      "blocks": [
+        ".env.example",
+        "apps/functions/.env.example",
+        "scripts/use-env.sh"
+      ],
+      "deps": {
+        "apps/web/package.json": ["@revenuecat/purchases-js"],
+        "apps/mobile/package.json": [
+          "react-native-purchases",
+          "react-native-purchases-ui"
+        ]
+      },
+      "env": [
+        "NEXT_PUBLIC_REVENUECAT_API_KEY",
+        "REVENUECAT_API_KEY_APPLE",
+        "REVENUECAT_API_KEY_GOOGLE",
+        "REVENUECAT_WEBHOOK_AUTH"
+      ],
+      "notes": [
+        "この層を宣言しているのは、実際に RevenueCat の配線がリポジトリにあるため。宣言しないと scripts/sync-layers.mjs が Template Sync のたびにテンプレートの billing.files（apps/mobile/src/lib/revenuecat.ts 等）を削除対象と見なす。",
+        "scripts/use-env.sh の layer:billing ブロックには Stripe のキー・ガードが含まれる。このリポジトリは Stripe を使っていないため実質デッドコードだが、テンプレートとの差分を増やさないためそのまま残している。",
+        "RevenueCat の API キー（REVENUECAT_API_KEY_APPLE / GOOGLE）は billing と mobile の交点。マーカーは layer:billing,mobile で、どちらが外れても消える。"
+      ]
+    }
+  ]
+}

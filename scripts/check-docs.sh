@@ -25,6 +25,7 @@ apps/mobile/.env.local
 .claude/docs/roadmap-archive.md
 packages/shared/dist/
 scripts/test-rules.sh
+scripts/test-layers.sh
 scripts/adopt-references.mjs
 scripts/test-adopt-references.sh
 scripts/install-release-command.sh
@@ -42,6 +43,7 @@ scripts/test-api-diff.sh
 # .templatesyncignore で同期対象外にしているもの）を参照している。
 # 派生プロジェクトには実在しないが参照切れではないため、ここで許可する。
 # scripts/test-rules.sh はルールテストを持たない方針のため置いていない（→ questions.md Q-002）。
+# scripts/test-layers.sh はテンプレート本体の形を前提にしており派生では通らないため置いていない。
 # このファイル自体は同期対象なので、テンプレート更新でこの追加分が消えたら戻すこと
 
 # 言及を拾う対象の接頭辞。これ以外（page.tsx のような汎用名や、
