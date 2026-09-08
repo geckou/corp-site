@@ -42,6 +42,7 @@
     "check:docs": "bash scripts/check-docs.sh"
   },
   "resolutions": {
+    "@commitlint/config-conventional": "^19",
     "tar": ">=7.5.11",
     "@xmldom/xmldom": ">=0.8.12",
     "@tootallnate/once": ">=3.0.1",
@@ -49,7 +50,7 @@
     "eslint-plugin-react-hooks": "^5"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21",
+    "@commitlint/cli": "^19",
     "@firebase/rules-unit-testing": "^4.0.0",
     "@geckou/commitlint-config": "^0.1.2",
     "@geckou/prettier-config": "^0.1.2",

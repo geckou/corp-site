@@ -14,11 +14,9 @@ on:
     # required status check が Pending のままマージできなくなるため。
     # 重いステップの省略は呼ばれる側（ci.yml）が差分を見て判断する
 
-# 同じ PR に連続 push したとき、古い実行を打ち切る
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
+# 同じ PR に連続 push したときの打ち切りは、呼ばれる側（テンプレートの ci.yml）が
+# 同じ group 名で宣言している。呼ぶ側にも書くと group が衝突して run が
+# ジョブを 1 つも起こさないまま失敗するため、ここには書かない
 jobs:
   ci:
     uses: geckou/project-starter/.github/workflows/ci.yml@v1
