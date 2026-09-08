@@ -41,10 +41,14 @@
 - 回答: 2026-09-08 / **A（作る）を採用**
 - 判断の理由: 持たないと Template Sync が「採用していない層」を機械的に外せず、
   同期 PR のたびに課金層前提のドキュメント・設定を手で外すことになる。作る手間は 1 回きり
-- 反映: Issue #33 で実施する（別ブランチ・別 PR。層まわりのスクリプトが入る #31 のマージ後）
-- 目標: `node scripts/check-layers.mjs` と `bash scripts/test-layers.sh` が通ること。
-  残っている `layer:billing:*` マーカーが外れていること。
-  `CLAUDE.md`「プロジェクト概要」の「`layers.json` は持っていない」の記述を直すこと
+- 反映済み: Issue #33（別ブランチ・別 PR）で実施。core / firebase / functions / mobile / billing の
+  5 層で `layers.json` を作り、`.env.example` と `apps/functions/.env.example` に層マーカーを入れた。
+  `node scripts/check-layers.mjs` が通る状態にし、`CLAUDE.md`「プロジェクト概要」も更新した
+- 補足: `billing` 層は宣言する側に倒した。RevenueCat の配線が実際にリポジトリにあるため、
+  宣言しないと `scripts/sync-layers.mjs` が Template Sync のたびにそれを削除対象と見なす。
+  Stripe / `@geckou/billing` は入れていない
+- 補足: `scripts/test-layers.sh`（層スクリプトの回帰テスト）はテンプレート本体のリポジトリの形を
+  前提にしており派生では通らないため、同期対象から外して削除した（→ geckou/project-starter#326）
 
 ### Q-002 Firestore ルールのテストを持つか
 

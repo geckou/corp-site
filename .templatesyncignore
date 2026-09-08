@@ -73,3 +73,9 @@ scripts/deploy.sh
 tests/
 scripts/test-rules.sh
 firebase.rules-test.json
+
+# 層スクリプトの回帰テスト。テンプレート本体のリポジトリの形（packages/*-config の実体、
+# renovate/*.json、全部入りの ci.yml、Stripe の env、apps/functions/src/lib/billing.ts 等）を
+# 前提に書かれており、派生プロジェクトでは通らない。層マニフェストの検証そのものは
+# scripts/check-layers.mjs が行うので、こちらは持たない（→ geckou/project-starter#326）
+scripts/test-layers.sh

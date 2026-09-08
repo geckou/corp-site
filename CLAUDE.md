@@ -25,9 +25,11 @@ Turborepo モノレポ。Next.js 15 (Web) + Firebase（Auth / Firestore / Hostin
 → `packages/README.md`）。CI も同じ考え方で、`.github/workflows/ci.yml` は
 テンプレートの reusable workflow を参照するだけにしてある。
 
-採用している層は **core + firebase + functions**（課金・Storage は使っていない）。
-テンプレートの層マニフェスト（`layers.json`）はこのリポジトリでは持っていないため、
-層の増減はスキル（`/add-*`）とドキュメントを見て判断する（→ `.claude/docs/layers.md`）。
+採用している層は **core + firebase + functions + mobile + billing**。どの層に何が属するかは
+**`layers.json`（層マニフェスト）が正**で、`node scripts/check-layers.mjs` が実態とのずれを検出する。
+**ファイルを追加・移動・削除したら `layers.json` も更新する**（→ `.claude/docs/layers.md`）。
+Storage と Stripe は使っておらず、`billing` 層は RevenueCat の配線だけ（課金画面は無い）。
+`apps/mobile` は scaffold のまま残しているだけ。
 
 ## プロダクトの目的（北極星）
 
@@ -263,6 +265,7 @@ yarn format / yarn format:check    # Prettier（packages/ をビルドしてか�
 yarn test                          # テスト実行
 yarn test:hooks                    # フックの回帰テスト
 yarn check:docs                    # ドキュメントの参照切れ検出
+node scripts/check-layers.mjs      # 層マニフェストと実態の一致を検証
 yarn firebase:emulators            # Firebase エミュレーター
 yarn env:<環境名> / deploy:<環境名>  # 環境切り替え / デプロイ（develop / staging / production）
 ```
