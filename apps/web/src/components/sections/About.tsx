@@ -16,15 +16,15 @@ export const About = ({ isActivated }: AboutProps) => {
   }, [isActivated])
 
   return (
-    <SectionContainer className="gap-sp-large section-about flex flex-col items-center justify-center">
+    <SectionContainer className="section-about flex flex-col items-center justify-center gap-sp-large">
       {isShownText && (
         <>
-          <p className="about-text about-text-1 text-fs-large z-contents opacity-0">
+          <p className="about-text about-text-1 z-contents text-fs-large opacity-0">
             Geckouという名前は、月光が暗闘で迷う人を照らして導くように、
             <br />
             「人々の支えとなる存在でありたい」という想いから名付けられました。
           </p>
-          <p className="about-text about-text-2 text-fs-large z-contents opacity-0">
+          <p className="about-text about-text-2 z-contents text-fs-large opacity-0">
             エンタテインメントのような付加価値の提供だけではなく、
             <br />
             Webサービス、Web開発の効率化により、悩みや不満を解消することで、

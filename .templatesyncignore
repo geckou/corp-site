@@ -1,8 +1,75 @@
-# Template Sync の対象外にするファイル。
+# Template Sync の対象外（このプロジェクト固有にカスタマイズするファイル）。
+# ここに載っていないファイル（.claude/hooks/, .claude/skills/, .github/workflows/,
+# scripts/, ルート設定等）がテンプレート更新の取り込み対象になる。
 #
-# 注: このリポジトリにはまだ Template Sync（.github/workflows/template-sync.yml）が
-# 設定されていない。設定する際は、テンプレート側の .templatesyncignore を参考に
-# apps/ packages/ 環境設定などの除外も追加すること。
+# ベースはテンプレート（geckou/project-starter）の .templatesyncignore。
+# 末尾の「このプロジェクト固有の除外」だけが corp-site の追加分。
+
+# プロダクト固有ドキュメント（企画書・仕様書・ロードマップは Notion で管理）
+.claude/docs/questions.md
+CLAUDE.md
+README.md
+
+# 環境・Firebase 設定（プロジェクトごとに異なる）
+.env*
+.firebaserc
+firebase.json
+firestore.rules
+firestore.indexes.json
+storage.rules
+
+# アプリ実装・共有コード（ドメインロジックはプロジェクト固有）
+apps/
+packages/
+
+# 依存関係（プロジェクトごとに増減する）
+package.json
+yarn.lock
+
+# フックのスタック依存設定（自分のスタックに合わせて書き換える）
+.claude/hooks/config.sh
+
+# 層マニフェスト（どの層を採用しているかはプロジェクトごとに違う）
+layers.json
+
+# テンプレート本体だけが持つワークフロー
+.github/workflows/layer-matrix.yml
+.github/workflows/smoke-test.yml
+.github/workflows/release-tag.yml
+
+# パッケージ公開の導線（テンプレート本体だけが持つ）
+.github/workflows/publish.yml
+scripts/release.sh
+scripts/geckou-release
+scripts/install-release-command.sh
+scripts/test-release-command.sh
+scripts/check-api-diff.mjs
+scripts/test-api-diff.sh
+scripts/check-workspace-ranges.mjs
+scripts/test-workspace-ranges.sh
+scripts/adopt-references.mjs
+scripts/test-adopt-references.sh
+
+# --- ここから corp-site 固有の除外 ---
 
 # CI はテンプレートを参照する形にしたため、実体で上書きされないようにする
 .github/workflows/ci.yml
+
+# デプロイ経路。Cloud Build 向けの NEXT_PUBLIC_* 書き出し・SSR 関数の .env パッチ・
+# 「ENV に対応する Hosting ターゲットだけを配る」対応がこのリポジトリ固有に入っている。
+# テンプレート側の実体で上書きすると全ターゲットへ配ってしまうため同期しない
+.github/workflows/deploy.yml
+scripts/deploy.sh
+
+# ローカル起動の設定（nvm 経由・autoPort。開発機の都合に合わせてある）
+.claude/launch.json
+
+# Node のバージョン。Functions のランタイム（firebase.json の nodejs20）と
+# 揃えているため、テンプレートの 22 で上書きしない（→ .claude/docs/questions.md）
+.nvmrc
+
+# ルールテストの実体。このプロジェクトは Storage を使わず、firestore.rules も
+# テンプレート（課金層あり）とは別物なので、テンプレートのテストは同期しない
+tests/
+scripts/test-rules.sh
+firebase.rules-test.json
