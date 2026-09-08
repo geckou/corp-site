@@ -68,7 +68,7 @@ project-starter/
 ├── firebase.json                # Firebase Functions / Hosting / Emulators 設定
 ├── .firebaserc                  # Firebase プロジェクト ID
 ├── turbo.json                   # Turborepo タスク定義
-├── .prettierrc                  # Prettier 設定（singleQuote 等）
+├── .prettierrc.cjs              # Prettier 設定（@geckou/prettier-config を参照）
 ├── .env.example                 # 環境変数のテンプレート
 └── package.json                 # ワークスペースルート + スクリプト定義
 ```

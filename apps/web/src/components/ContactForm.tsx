@@ -86,7 +86,7 @@ export const ContactForm = ({
       ref={formRef}
       method="post"
       action="https://hyperform.jp/api/zbvrBVp1"
-      className="gap-sp-large contact-form flex w-full flex-col"
+      className="contact-form flex w-full flex-col gap-sp-large"
       onSubmit={enableTypoCheck ? handleSubmit : undefined}
     >
       {inputItems.map((item, index) => (

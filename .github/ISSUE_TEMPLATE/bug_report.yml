@@ -22,8 +22,8 @@ body:
   - type: input
     id: template-version
     attributes:
-      label: テンプレートのバージョン / コミット
-      description: 派生元のコミットハッシュ・タグ・ブランチなど
+      label: 派生元のコミット
+      description: 派生元となったテンプレートのコミットハッシュ（派生プロジェクトで `git log` から確認）
       placeholder: 例) production @ a1b2c3d
     validations:
       required: true

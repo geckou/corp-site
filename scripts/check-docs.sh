@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -u
+
+# ドキュメントが実在しないファイルを指していないか検査する。
+#
+# コードを移動・削除したときにドキュメントの追従を忘れると、読んだ人（と AI）が
+# 存在しないパスを前提に作業してしまう。型チェックにもテストにも引っかからないため、
+# ここで機械的に検出する。
+#
+# 検査するもの:
+#   1. リポジトリ相対パスの言及（apps/ packages/ scripts/ tests/ .claude/ .github/ 配下）
+#   2. Markdown の相対リンク先（[text](path)）
+#
+# node_modules に依存しないので yarn install なしで実行できる。
+# 実体を package.json ではなくこのスクリプトに置いている理由は
+# scripts/test-hooks.sh と同じ（ルート package.json は Template Sync の対象外）。
+
+cd "$(dirname "$0")/.."
+
+# 実在しなくてよいパス。gitignore されるファイルと、必要になった時点で作るもの
+ALLOW_MISSING='
+apps/functions/.env
+apps/functions/.secret.local
+apps/mobile/.env.local
+.claude/docs/roadmap-archive.md
+packages/shared/dist/
+apps/web/.env.production
+tests/firestore-rules.test.ts
+scripts/test-rules.sh
+scripts/adopt-references.mjs
+scripts/test-adopt-references.sh
+scripts/install-release-command.sh
+scripts/test-release-command.sh
+scripts/check-workspace-ranges.mjs
+scripts/test-workspace-ranges.sh
+scripts/test-api-diff.sh
+.github/workflows/layer-matrix.yml
+.github/workflows/release-tag.yml
+'
+
+# 上の後半（apps/web/.env.production 以降）はこのリポジトリでの追加分。
+# テンプレート（geckou/project-starter）から同期してくるドキュメントは、
+# テンプレート本体だけが持つファイル（パッケージ公開・層検証まわり。
+# .templatesyncignore で同期対象外にしているもの）を参照している。
+# 派生プロジェクトには実在しないが参照切れではないため、ここで許可する。
+# apps/web/.env.production は scripts/deploy.sh が生成する gitignore 対象、
+# ルールテスト2件はまだ持っていないもの（→ .claude/docs/questions.md Q-002）。
+# このファイル自体は同期対象なので、テンプレート更新でこの追加分が消えたら戻すこと
+
+# 言及を拾う対象の接頭辞。これ以外（page.tsx のような汎用名や、
+# nuxt-nextjs.md が例示する Nuxt 側の server/api/ 等）は誤検出になるので拾わない
+PREFIXES='apps|packages|scripts|tests|\.claude|\.github'
+
+findings=$(mktemp)
+trap 'rm -f "$findings"' EXIT
+
+is_allowed() { printf '%s\n' "$ALLOW_MISSING" | grep -qxF "$1"; }
+
+# プレースホルダ・グロブ・変数展開を含む記述は検査対象にしない
+is_literal() {
+  case "$1" in
+    *'*'* | *'{'* | *'<'* | *'$'* | *'…'* | *' '*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+checked=0
+
+# 追跡されている Markdown が対象（node_modules は git 管理外なので自然に外れる）。
+# .claude/skills/ は除外する。スキルは「これから作るファイル」を書くものなので、
+# 実在しないパスを含むのが正しい（apps/admin/ や scheduled.ts 等）
+# 空白入りのファイル名で単語分割されないよう NUL 区切りで読む
+while IFS= read -r -d '' doc; do
+  case "$doc" in
+    .claude/skills/*) continue ;;
+  esac
+
+  checked=$((checked + 1))
+
+  # --- 1. リポジトリ相対パスの言及 ---
+  grep -nEo "(^|[^a-zA-Z0-9_/.-])($PREFIXES)/[a-zA-Z0-9_@./{}*<>-]+" "$doc" 2>/dev/null |
+    while IFS=: read -r line match; do
+      # 先頭に紛れ込んだ区切り文字と、文末の句読点・括弧を落とす
+      path=$(printf '%s' "$match" | sed -E 's/^[^a-zA-Z._]+//; s/[.,)）。、:]+$//')
+
+      is_literal "$path" || continue
+      is_allowed "$path" && continue
+      [ -e "$path" ] && continue
+
+      printf '%s:%s\t%s\n' "$doc" "$line" "$path" >>"$findings"
+    done
+
+  # --- 2. Markdown の相対リンク（記述元ファイルからの相対）---
+  grep -nEo '\]\([^)]+\)' "$doc" 2>/dev/null |
+    while IFS=: read -r line match; do
+      target=$(printf '%s' "$match" | sed -E 's/^\]\(//; s/\)$//; s/#.*$//')
+
+      [ -z "$target" ] && continue
+      case "$target" in http*|mailto:*|/*) continue ;; esac
+
+      is_literal "$target" || continue
+      is_allowed "$target" && continue
+      [ -e "$(dirname "$doc")/$target" ] && continue
+
+      printf '%s:%s\tリンク先 %s\n' "$doc" "$line" "$target" >>"$findings"
+    done
+done < <(git ls-files -z '*.md')
+
+# 同じ行がパス言及とリンクの両方で拾われることがあるため、重複を除いてから数える
+sort -u "$findings" -o "$findings"
+fail=$(wc -l <"$findings" | tr -d ' ')
+
+if [ "$fail" -gt 0 ]; then
+  echo '=== 参照切れ ==='
+  while IFS=$'\t' read -r where what; do
+    printf 'FAIL %-44s %s が存在しません\n' "$where" "$what"
+  done <"$findings"
+fi
+
+printf '\n%s ファイルを検査、%s 件の参照切れ\n' "$checked" "$fail"
+
+if [ "$fail" -gt 0 ]; then
+  {
+    echo
+    echo 'ドキュメントが実在しないパスを指しています。移動先に書き換えるか、'
+    echo '意図的に存在しないもの（gitignore 対象など）なら'
+    echo 'scripts/check-docs.sh の ALLOW_MISSING に追加してください。'
+  } >&2
+  exit 1
+fi

@@ -1,25 +1,23 @@
 name: CI
 
-# チェックの中身はテンプレート（geckou/project-starter）を参照する。
-# ファイルをコピーしないので、テンプレート側の修正が取り込み作業ゼロで届く。
-# 層構成（mobile / firebase の有無）は呼ばれた側が実ファイルを見て判定する。
-# 詳細はテンプレートの .claude/docs/git-workflow.md「CI の配布（reusable workflow）」。
+# 中身はテンプレート側の reusable workflow を参照する（コピーしない）。
+# チェック内容の修正は geckou/project-starter の 1 コミットで取り込み作業ゼロで届く。
+# 詳細は .claude/docs/git-workflow.md の「CI の配布（reusable workflow）」を参照。
 #
-# push では回さない。production への push は deploy.yml の check ジョブが
-# 同じ検査（type-check / lint / format / test / build）を通してからデプロイする。
-
+# このファイルは scripts/adopt-references.mjs が生成した推奨形。
+# production への push をトリガーに含めないのは、deploy.yml が同じチェックを
+# 実行するため（含めると check が二重に走る）。
 on:
   pull_request:
-    branches: [production, 'release/**']
-    # アプリの動作に影響しない変更では回さない（Actions 分の節約）
-    paths-ignore:
-      - '**/*.md'
-      - '.claude/docs/**'
-      - '.claude/skills/**'
-      - '.claude/launch.json'
-      - '.vscode/**'
-      - '.editorconfig'
-      - 'LICENSE'
+    branches: [production, 'release/**', 'hotfix/**']
+    # paths-ignore は使わない。除外に当たった PR ではワークフローが起動せず、
+    # required status check が Pending のままマージできなくなるため。
+    # 重いステップの省略は呼ばれる側（ci.yml）が差分を見て判断する
+
+# 同じ PR に連続 push したとき、古い実行を打ち切る
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ci:
