@@ -51,8 +51,8 @@
   "devDependencies": {
     "@commitlint/cli": "^21",
     "@firebase/rules-unit-testing": "^4.0.0",
-    "@geckou/commitlint-config": "^0.1.2",
-    "@geckou/prettier-config": "^0.1.2",
+    "@geckou/commitlint-config": "^0.2.0",
+    "@geckou/prettier-config": "^0.2.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",
