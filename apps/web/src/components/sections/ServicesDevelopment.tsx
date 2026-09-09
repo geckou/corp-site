@@ -66,10 +66,11 @@ export const ServicesDevelopment = ({
             </span>
             <span>デザイン段階から完成までお任せいただくことが可能です。</span>
             <span>
-              バックエンドのシステムには、提携企業である株式会社STOVE開発のノーコードツール
+              開発には自社製のプロジェクトテンプレート&quot;Project
+              Starter&quot;を使用し、
             </span>
             <span>
-              &quot;CORE&quot;を使用し、迅速な開発を可能としています。
+              AIによる実装を前提とした構成で、迅速かつ堅牢な開発を可能としています。
             </span>
           </>
         }
