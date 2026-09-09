@@ -75,6 +75,12 @@ scripts/test-adopt-references.sh
 # CI はテンプレートを参照する形にしたため、実体で上書きされないようにする
 .github/workflows/ci.yml
 
+# 環境切り替え。FUNCTIONS_ENV_KEYS にこのプロジェクト固有のキー
+# （TYPO_CHECK_API_URL / TYPO_CHECK_API_KEY / REVENUECAT_WEBHOOK_AUTH）を持っており、
+# テンプレートの実体で上書きすると apps/functions/.env から消えて Functions が壊れる。
+# 実際に初回同期で消えた（→ geckou/project-starter#338）
+scripts/use-env.sh
+
 # デプロイ経路。Cloud Build 向けの NEXT_PUBLIC_* 書き出し・SSR 関数の .env パッチ・
 # 「ENV に対応する Hosting ターゲットだけを配る」対応がこのリポジトリ固有に入っている。
 # テンプレート側の実体で上書きすると全ターゲットへ配ってしまうため同期しない

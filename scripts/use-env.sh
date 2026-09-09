@@ -80,6 +80,12 @@ FUNCTIONS_ENV_KEYS=(
   SYNC_SUBSCRIPTION_CLAIMS
   # layer:billing:end
   SENTRY_DSN
+  # このプロジェクト固有。問い合わせフォームのタイポ判定（apps/functions/src/lib/typo-check.ts）と
+  # RevenueCat Webhook が読む。ここに挙げていないキーは環境切り替えのたびに
+  # apps/functions/.env から消えるため、Functions が使う変数は必ず追記すること
+  TYPO_CHECK_API_URL
+  TYPO_CHECK_API_KEY
+  REVENUECAT_WEBHOOK_AUTH
 )
 # layer:functions:end
 
