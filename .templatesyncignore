@@ -90,6 +90,12 @@ tests/
 scripts/test-rules.sh
 firebase.rules-test.json
 
+# env 配布の回帰テスト。テンプレート版の scripts/deploy.sh を前提にしていて、
+# このリポジトリ固有の deploy.sh（Cloud Build 向けの書き出し等）とは噛み合わない
+# （`yarn build` が見つからず 3 件失敗する）。ci.yml は hashFiles で存在を見てから
+# 走らせるので、持たなければスキップされる。→ geckou/project-starter#338
+scripts/test-env-distribution.sh
+
 # 層スクリプトの回帰テスト。テンプレート本体のリポジトリの形（packages/*-config の実体、
 # renovate/*.json、全部入りの ci.yml、Stripe の env、apps/functions/src/lib/billing.ts 等）を
 # 前提に書かれており、派生プロジェクトでは通らない。層マニフェストの検証そのものは
