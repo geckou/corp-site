@@ -168,6 +168,35 @@ yarn deploy:production
 CI/CD: `.github/workflows/deploy.yml` が `release/*` / `hotfix/*`（→ staging）と `production` の push で自動デプロイ。
 develop は自動デプロイ対象外（複数人の feat/* push が互いに上書きし合うため）。各自 `yarn deploy:develop` で手動デプロイする。
 
+### Hosting のターゲットは環境名に合わせる
+
+既定は 1 環境 = 1 Firebase プロジェクトで、`firebase.json` の `hosting` も 1 つ。この構成では
+`deploy.sh` は `firebase deploy --only hosting` を 1 回実行するだけで、以下は関係ない。
+
+1 つの Firebase プロジェクトに複数のサイトを相乗りさせる場合（`.firebaserc` の `targets` に
+サイトを並べ、`firebase.json` の `hosting` を配列にする構成）は、**ターゲット名を環境名
+（`develop` / `staging` / `production`）に揃えること。** `deploy.sh` は環境名と一致する
+ターゲットだけに配る。
+
+```jsonc
+// firebase.json
+"hosting": [
+  { "target": "staging", "source": "apps/web", "frameworksBackend": { "region": "asia-northeast1" } },
+  { "target": "production", "source": "apps/web", "frameworksBackend": { "region": "asia-northeast1" } }
+]
+```
+
+揃えないと**絞り込みができず、全ターゲットに配られる**。`yarn deploy:staging` が
+staging の `.env` でビルドしたものを production のサイトにも出す、という壊れ方をする
+（警告は出るが、止まりはしない）。環境名で分けられない構成（`web` / `admin` のような
+役割での分割）では `DEPLOY_HOSTING_TARGETS` で配る先を明示する。
+
+```bash
+DEPLOY_HOSTING_TARGETS='web admin' yarn deploy:staging
+```
+
+判定は `scripts/lib/hosting-targets.mjs` にあり、`scripts/test-deploy-targets.sh` が回帰テストする。
+
 ### CI 用 GitHub Secrets の登録
 
 `deploy.yml` はデプロイ時に環境別の env をシークレットから `.env.<環境名>` に書き出す（`secrets[format('ENV_FILE_{0}', name)]`）。
@@ -240,8 +269,24 @@ gh api repos/{owner}/{repo}/rulesets \
   --input .github/rulesets/production.json
 ```
 
-内容: production の削除・force push 禁止、PR 必須（レビュー1件）、Required status checks（`guard` / `ci / ci`）。
+内容: production の削除・force push 禁止、PR 必須（**承認は 0 件**）、Required status checks（`guard` / `ci / ci`）。
 `hotfix/*` の緊急セルフマージを許す場合は、取り込み後に UI で bypass 設定を調整する。
+
+⚠️ **承認を既定で 0 件にしている理由。** このテンプレートは「PR を出すのは AI、マージの判断は人」
+（CLAUDE.md）というモデルで、**マージボタンを押す人間が既にゲートになっている**。ここを 1 件以上に
+すると、もう 1 人の人間を要求することになり、レビュー担当が実質 1 人の構成では**自分の PR を自分で
+承認できない**（GitHub の仕様）ため、出した PR が軒並みマージできなくなる。
+
+承認 0 件でも、**PR 必須（直接 push 禁止）と Required status checks は効く** — この ruleset の
+主目的である「赤い PR をマージできなくする」は保たれる。複数人でレビューを回すプロジェクトは、
+取り込み後に UI で 1 以上へ上げる（`hotfix/*` の bypass 設定と同じ扱い）。そのとき
+**`require_last_push_approval` を同時に有効にしないこと** — 「最後の push を pusher 以外が
+承認していること」を要求するルールで、承認者が 1 人しかいない構成では同じデッドロックが再発する。
+自動マージとの噛み合わせは `.claude/docs/dependencies.md`「決めていること」を参照。
+
+**既に `1` で取り込んでいるリポジトリは、この JSON を直しても変わらない**（ruleset は
+リポジトリ外の状態。`yarn setup` も同名の ruleset があれば skip する）。UI か、この節の後半の
+`gh api repos/{owner}/{repo}/rulesets/{id} --method PUT` で下げる。
 
 `release/*` / `hotfix/*` も同じ仕組みで塞ぐ:
 
@@ -285,7 +330,7 @@ CI を参照形へ移行したら（`scripts/adopt-references.mjs`）、GitHub �
 `ci / ci` へ更新する必要がある。
 
 ```bash
-# 取り込み済みの ruleset を確認して、required_status_checks の context を直す
+# 取り込み済みの ruleset を確認して、中身（required check の名前、承認数など）を直す
 gh api repos/{owner}/{repo}/rulesets
 gh api repos/{owner}/{repo}/rulesets/{id} --method PUT --input -
 ```
@@ -311,6 +356,17 @@ jobs:
   ci:
     uses: geckou/project-starter/.github/workflows/ci.yml@v1
 ```
+
+**呼ぶ側に `concurrency` を書かないこと。** reusable workflow の `concurrency` は
+呼び出し元のコンテキストで評価されるため、呼ばれる側（テンプレートの `ci.yml`）が宣言している
+`ci-${{ github.ref }}` と group 名が一致する。run が自分自身の group を奪い、**ジョブを 1 つも
+起こさないまま数秒で failure** になる（jobs 0 件・ログもアノテーションも無い）。連続 push の
+打ち切りは呼ばれる側が持っているので、書かなくても挙動は変わらない。
+
+**既に参照方式へ移行済みの派生には、この修正が Template Sync では届かない。**
+派生の `ci.yml` は派生側の `.templatesyncignore` に載っていて上書きされないため、
+`node scripts/adopt-references.mjs --repo <派生のパス>` を流し直す必要がある
+（冪等なので、他の設定が推奨形なら差分は `ci.yml` だけになる。`--force` は要らない）。
 
 `hotfix/**` を落とさないこと。`.github/rulesets/release.json` は `hotfix/*` にも PR を
 必須にしているので、トリガーから外すと**緊急対応のときだけ** type-check / lint / test が
@@ -427,7 +483,7 @@ reusable workflow の `actions/checkout` は**呼び出し元のリポジトリ*
 | ルールテスト | `tests/*rules*.test.ts` の有無（`firestore.rules` があってもテストが無ければ走らせない） |
 | Hook Test / Layer Check | 対応するスクリプトの有無（`hashFiles`） |
 
-**古い派生プロジェクトからも呼べる。** `scripts/format.sh` や `scripts/test-rules.sh` が
+**古い派生プロジェクトからも呼べる。** `scripts/format.sh` やルールテストのスクリプトが
 まだ Template Sync で届いていない構成では、`yarn format:check` / `yarn test:rules` に
 フォールバックする（スクリプトは呼び出し元のものが実行されるため、届いていないことがある）。
 
@@ -486,6 +542,126 @@ gh api repos/{owner}/{repo}/rulesets \
 レビューの観点と言語は `.github/copilot-instructions.md` が決める。Copilot code review が
 使えるプラン・組織設定でない場合は取り込みが失敗する（その場合は `.github/workflows/claude.yml`
 の auto-review だけで運用する。両方入れて二重にレビューさせてもよい）。
+
+## Template Sync の有効化（派生プロジェクト）
+
+親テンプレートの更新を週次で PR として取り込む（`.github/workflows/template-sync.yml`）。
+ワークフローは同梱されているが、**認証情報を登録するまで動かない**。未登録のまま動かすと
+CI が 1 つも走らない PR を作り続けることになるため、最初のステップで明示的に落としてある。
+
+GitHub App と PAT のどちらでも動く。**App を推奨**する。
+
+| | 同期 PR の作成者 | 紐づく先 | 期限 |
+| --- | --- | --- | --- |
+| GitHub App | bot | Organization / 個人アカウント | 秘密鍵に期限なし |
+| PAT | トークンの持ち主 | 個人アカウント | あり（切れると毎週失敗に戻る） |
+
+App のインストールトークンは 1 時間で失効するため Secrets には置けず、実行時に生成する。
+登録するのは秘密鍵と Client ID であって、トークンそのものではない。
+
+PAT だと、詰まる／詰まらない以前に次の2つが常時ついて回る。
+
+- **承認を必須にしていて、承認できる人が他にいないと詰まる。** 自分の PR は自分で承認できないため、
+  `required_approving_review_count` を 1 以上へ上げていて、かつ承認者がトークンの持ち主しか
+  いない構成では、毎週マージできない PR ができる（既定は 0 なので、上げていなければ
+  詰まりはしない。→「マージルールの強制」）
+- **帰属が嘘になる。** cron が取り込んだものが、人の判断として履歴に残る
+
+### 先に `template-sync` ラベルを作る
+
+ワークフローは同期 PR に `template-sync` ラベルを付ける（`pr_labels`）。
+`AndreasAugustin/actions-template-sync` は**ラベルが無ければ作りに行くが、失敗しても警告だけ出して
+先へ進み**、そのあとの `gh pr create --label` でラベルが見つからず PR の作成に失敗する
+（v2.5.3 のソースで確認）。
+
+ラベル作成に必要な権限は**未確認**だが、下で設定する権限（Contents / Pull requests）だけの
+トークンでは作れない可能性がある。そうだとすると、App 側に `Issues: Read and write` を足す形でも
+避けられるはず。
+
+scaffold 直後のリポジトリにこのラベルは無いので、先に作っておくのが確実。
+
+```bash
+gh label create template-sync
+```
+
+### GitHub App を使う場合（推奨）
+
+1. **App を作る** — Organization settings > Developer settings > GitHub Apps > New GitHub App
+   （個人アカウント所有にするなら Settings > Developer settings > GitHub Apps）
+   - Repository permissions: **Contents: Read and write** / **Pull requests: Read and write**
+   - **Webhook の Active のチェックを外す**（このワークフローは webhook を使わない）
+   - 親テンプレートは public なので、読み取り用の追加権限は要らない
+2. **Client ID を控え、Private key を生成する**（`.pem` がダウンロードされる）
+3. **インストールする** — 作った App をインストールし、対象を派生リポジトリに絞る
+4. **登録する** — Client ID は Variables、秘密鍵は Secrets（置き場所が違う）
+
+   ```bash
+   # 秘密鍵。改行ごと渡す必要があるので、貼り付けずにファイルから読ませる
+   gh secret set TEMPLATE_SYNC_APP_PRIVATE_KEY < path/to/key.pem
+   ```
+
+   Client ID は Settings > Secrets and variables > Actions > **Variables** タブで
+   `TEMPLATE_SYNC_APP_CLIENT_ID` として登録する（Secrets タブではない）。
+5. **確認する** — Actions > Template Sync > Run workflow
+   - PR ができたら、**作成者が bot になっていること**を見る
+   - 同期 PR の head は `chore/template_sync_<ハッシュ>` で、`branch-guard.yml` がこれを
+     `production` への PR の例外として明示的に許可している（だから guard が緑になる）
+
+   ⚠️ **ジョブが緑でも PR が 0 件のことがある。** 3 通りある（v2.5.3 のソースで確認）。
+
+   1. テンプレート側に新しいコミットが無い（取り込み済み）
+   2. 取り込んだ結果に差分が無い
+   3. **同名の同期ブランチが remote に残っている** — 前回の実行が PR の作成だけ失敗すると、
+      ブランチは push 済みで PR だけ無い状態になる。この状態では以降の実行が
+      「ブランチがあるので何もしない」で緑のまま終わり、テンプレート側の HEAD が動くまで
+      PR が作られない。残った `chore/template_sync_*` ブランチを消してから再実行する
+
+   1 と 2 は正常だが、3 は詰まっているので区別する。初回は PR ができるところまで見届ける。
+
+⚠️ **Variables / Secrets を Organization に置くと、全リポジトリに継承される。** 落ち方が
+2 通りあるので、置く順番に注意する。
+
+- `TEMPLATE_SYNC_APP_CLIENT_ID` だけを先に Org へ置く → まだ秘密鍵の無いリポジトリが
+  「App の設定が片方だけです」で落ちる（設定漏れを PAT で黙って隠さないための挙動）
+- 両方を Org へ置く → App を未インストールのリポジトリで、トークン生成のステップが落ちる
+
+**App を対象リポジトリへインストールしてから、両方をまとめて置く。**
+リポジトリ単位で登録するぶんには、他のリポジトリに影響しない。
+
+**つまずきやすいところ**: 秘密鍵の改行が落ちていると、トークン生成のステップだけが落ちる。
+エラーメッセージからは鍵の問題だと読み取りにくいので、`gh secret set ... < file` の形で入れる。
+
+### PAT を使う場合
+
+App を作れないとき（Organization の owner 権限が無い、個人リポジトリで scaffold した等）の代替。
+
+Settings > Developer settings > Personal access tokens > **Fine-grained tokens** で作る。
+Repository access に対象リポジトリ、権限は **Contents: Read and write** と
+**Pull requests: Read and write**（Metadata は自動で付く）。
+
+```bash
+gh secret set TEMPLATE_SYNC_TOKEN
+```
+
+⚠️ **未確認**だが、Organization 所有のリポジトリでは組織側が fine-grained PAT を許可している
+必要があり、ポリシーによっては組織オーナーの承認待ちになる。そうだとすると
+「owner 権限が無いから App を作れない」という状況では、この代替も通らない。
+
+期限が切れると毎週の実行が失敗に戻る。更新を促す仕組みは無いので、期限を長めに取るか
+カレンダーに入れておく。App へ移るときは、秘密鍵を Secrets、Client ID を Variables に
+**両方まとめて**足す（片方だけだと「App の設定が片方だけです」で落ちる）。ワークフローは
+App があればそちらを優先するので、`TEMPLATE_SYNC_TOKEN` は残っていても使われない。
+
+### なぜ `GITHUB_TOKEN` では駄目か
+
+`GITHUB_TOKEN` が起こしたイベントは新しいワークフローを起動しない、という GitHub の仕様がある。
+そのままだと同期 PR で ci / branch-guard / docs-check が一切走らず、required status check
+（`guard` / `ci / ci`）が Expected のまま埋まらないため、マージできない PR になる。
+PR にワークフローを起こすために、外部のトークンが要る。
+
+なお、取り込み元（親テンプレート）の**読み取り**は `github.token` で行う。親は public で足りるうえ、
+App のインストールトークンは `owner` / `repositories` を指定しない限り自リポジトリにしか
+スコープされないため、別リポジトリを読む経路には使えない。
 
 ## ブランチ名とコミットメッセージの補足
 

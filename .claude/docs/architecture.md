@@ -1,4 +1,8 @@
-# アーキテクチャ詳細
+# アーキテクチャパターン
+
+> このドキュメントは**全部入りの構成**（core + firebase + functions + mobile + billing）を前提に書いている。
+> どの層が何を持ち込むかは `.claude/docs/layers.md` と `layers.json` を参照。
+> 層を外した構成では、その層に属するセクションは読み飛ばしてよい。
 
 ## API 方針
 
@@ -6,15 +10,39 @@
 Next.js の API Routes（`app/api/`）は使わない。
 
 理由: Mobile アプリからも同じ API を呼ぶため。
+Next.js の API Routes は Web からしかアクセスできないが、
 Cloud Functions なら Web・Mobile・外部サービス（Webhook 等）全てから共通で使える。
+
+<!-- layer:firebase:start -->
+
+**例外**: セッション Cookie の発行・破棄を行う `app/api/session/` のみ API Routes を許可する
+（`apps/web/src/app/api/session/route.ts`）。Cookie は Web 固有かつ same-origin で
+設定する必要があり、`middleware.ts` のルート保護がこの Cookie を前提とするため。
+
+<!-- layer:firebase:end -->
+
+### functions 層を含まない構成
+
+この規約は**全構成で共通**とする。構成によって API の書き方が変わると、
+後から Mobile を足すときに API を移植し直すことになり、`/new-function` も使えなくなるため。
+
+`apps/functions` を持たない構成（core / core + firebase）は、**API を持たない**。
+API・Firestore / Auth トリガー・スケジュール実行のいずれかが必要になった時点で
+functions 層を足す（`/add-functions`）。「API Routes で代用する」という選択肢は取らない。
+
+なお `hosting.frameworksBackend` による SSR 用の関数は、framework アダプタが自動生成して
+Cloud Functions (2nd gen) にデプロイするもので、`apps/functions` とは別物。
+core の時点で存在し、Blaze プランもこの時点で必須になる。
+
+<!-- layer:firebase:start -->
 
 ## Firebase の使い分け
 
-| 場面 | ファイル | SDK | 説明 |
-|---|---|---|---|
-| クライアント（ログイン UI 等） | `apps/web/src/lib/firebase.ts` | `firebase` | `'use client'` 必須 |
-| サーバー（SSR / Server Actions） | `apps/web/src/lib/firebase-admin.ts` | `firebase-admin` | `server-only` で保護 |
-| Functions | `apps/functions/src/` | `firebase-admin` | `initializeApp()` は `index.ts` で1回のみ |
+| 場面                             | ファイル                             | SDK              | 説明                                                             |
+| -------------------------------- | ------------------------------------ | ---------------- | ---------------------------------------------------------------- |
+| クライアント（ログイン UI 等）   | `apps/web/src/lib/firebase.ts`       | `firebase`       | `'use client'` 必須                                              |
+| サーバー（SSR / Server Actions） | `apps/web/src/lib/firebase-admin.ts` | `firebase-admin` | `server-only` で保護。クライアントから import するとビルドエラー |
+| Functions                        | `apps/functions/src/`                | `firebase-admin` | `initializeApp()` は `index.ts` で1回のみ                        |
 
 ## 認証フロー
 
@@ -26,8 +54,47 @@ Cloud Functions なら Web・Mobile・外部サービス（Webhook 等）全て�
 ```
 
 参考実装:
+
 - ログインページ: `apps/web/src/app/login/page.tsx`
 - ミドルウェア: `apps/web/src/middleware.ts`
+
+### session cookie の名前は `__session` 固定
+
+Cookie 名は `apps/web/src/lib/session-cookie.ts` の `SESSION_COOKIE_NAME` に集約し、
+middleware・API Route・保護ページはそこから import する。値は `__session` から変えない。
+
+Firebase Hosting は Cloud Functions / Cloud Run へ転送するリクエストから `__session` 以外の
+cookie を落とす。apps/web は framework-backed Hosting で SSR するため、別名にすると
+デプロイ環境でだけログインがループする（middleware に cookie が届かず `/login` へ戻る）。
+ローカルの `next dev` は CDN を通らないので再現しない。
+
+`__session` を使うと Hosting の CDN は cookie 付きの応答をキャッシュしなくなる。
+middleware が付ける `private, no-store` と目的が重なるが、どちらも外さない。
+
+### session cookie の発行は「直近のサインイン」に限る
+
+`/api/session` の POST は `verifyIdToken(idToken, true)` を通し、`auth_time` が 5 分以内の
+ID トークンだけを cookie に交換する（Firebase の公式手順）。見ないと、有効期限 1 時間の
+ID トークンが 1 つ漏れただけで**5 日有効な cookie へ格上げ**できてしまう。
+古い ID トークンは 401（`Recent sign-in required`）になるので、クライアント側は
+再サインイン（または `getIdToken(true)` ではなく再認証）へ誘導する。
+
+### サインアウトは全デバイスのセッションを失効させる
+
+`/api/session` の DELETE は cookie を消すだけでなく `revokeRefreshTokens(uid)` を呼ぶ。
+これはそのユーザーの**全リフレッシュトークン**を失効させるので、**Web でログアウトすると
+mobile のログインも切れる。**
+
+Firebase Auth には「この session cookie だけを失効させる」API が無く、cookie の削除だけでは
+漏れた cookie が最長 5 日そのまま使えてしまう。奪われた cookie を能動的に無効化できることを
+優先して、全デバイス失効を選んでいる。**mobile を持つ派生プロジェクトでこの挙動が
+不都合なら、`revokeRefreshTokens` の呼び出しを外す**（cookie 削除のみになる）。
+
+あわせて非対称がある。session cookie 側は失効前提の設計（保護ページは
+`verifySessionCookie(cookie, true)` で見る）だが、`apps/functions` の `requireAuth`
+（`createRequireAuth`）は `checkRevoked` を渡しておらず既定の `false` のままなので、
+**API 側は失効後も最大 1 時間 ID トークンが通る。** ここを揃えたい場合は
+`checkRevoked: true` にする（Auth への追加リクエストが 1 回増える）。
 
 ## データ取得パターン
 
@@ -35,18 +102,40 @@ Server Component で Firestore からデータを取得する（SSR）:
 
 ```typescript
 // apps/web/src/app/dashboard/page.tsx
-import { adminDb } from '@/lib/firebase-admin'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+
+import { adminAuth, adminDb } from '@/lib/firebase-admin'
+import { SESSION_COOKIE_NAME } from '@/lib/session-cookie'
 
 export default async function DashboardPage() {
-  const snapshot = await adminDb.collection('users').limit(10).get()
-  const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-  return <ul>{users.map(user => <li key={user.id}>{user.id}</li>)}</ul>
+  // middleware は Cookie の存在チェックのみ（Edge runtime では firebase-admin が
+  // 使えない）。セッション Cookie の実検証は保護ページ側で行う
+  const sessionCookie = (await cookies()).get(SESSION_COOKIE_NAME)?.value
+  if (!sessionCookie) redirect('/login?redirect=/dashboard')
+
+  const decoded = await adminAuth
+    .verifySessionCookie(sessionCookie, true)
+    .catch(() => null)
+  if (!decoded) redirect('/login?redirect=/dashboard')
+
+  // 検証済みの uid にスコープして読む。コレクション全件を読む形にしない
+  const userDoc = await adminDb.collection('users').doc(decoded.uid).get()
+  const user = userDoc.data()
+
+  return <p>{user?.displayName}</p>
 }
 ```
 
 クライアントでリアルタイム更新が必要な場合のみ `'use client'` + Firebase クライアント SDK を使う。
 
+参考実装: `apps/web/src/app/dashboard/`（page + loading + error セット）
+
+<!-- layer:firebase:end -->
+
 ## ページの基本構成
+
+新しいページは以下の3ファイルセットで作る:
 
 ```
 app/<path>/
@@ -57,50 +146,182 @@ app/<path>/
 
 ## 環境変数の配置
 
-| 種類 | ファイル | 例 |
-|---|---|---|
-| Web クライアント用 | `.env.local`（ルート） | `NEXT_PUBLIC_FIREBASE_*` |
-| Mobile 用 | `.env.local`（ルート） | `FIREBASE_*`（app.json の extra 経由） |
-| サーバー専用 | `.env.local`（ルート） | `FIREBASE_SERVICE_ACCOUNT_KEY` |
-| Functions 専用 | `apps/functions/.env` | `REVENUECAT_WEBHOOK_SECRET` |
+| 種類               | ファイル               | 例                                     |
+| ------------------ | ---------------------- | -------------------------------------- |
+| Web クライアント用 | `.env.local`（ルート） | `NEXT_PUBLIC_FIREBASE_*`               |
+| Mobile 用          | `apps/mobile/.env.local`（use-env.sh が配布） | `FIREBASE_*`（app.config.ts の extra 経由） |
+| サーバー専用       | `.env.local`（ルート） | `FIREBASE_SERVICE_ACCOUNT_KEY`         |
+| SSR 実行時（関数の環境変数） | `apps/web/.env`（use-env.sh が許可リストのキーのみ生成） | `BASIC_AUTH_CREDENTIALS` |
+| Functions 専用     | `apps/functions/.env`（use-env.sh が許可リストのキーのみ生成） | `ALLOWED_ORIGINS`, `STRIPE_PRICE_IDS` |
+| Functions の秘密   | Secret Manager（`firebase functions:secrets:set`）。エミュレーターは `apps/functions/.secret.local` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `REVENUECAT_WEBHOOK_AUTH` |
 
 `NEXT_PUBLIC_` プレフィックスはブラウザに露出する。サーバー用の値には絶対に付けない。
 
+すべての環境変数はルートの `.env.<環境名>` を単一の正とし、`yarn env:<環境名>`
+（`scripts/use-env.sh`）が各所へ配布する。`apps/functions/.env` だけは全文コピーではなく、
+`FUNCTIONS_ENV_KEYS` の許可リストに載ったキーだけを抽出して生成する。Functions の `.env` は
+デプロイ時に関数の環境変数として取り込まれるため、`FIREBASE_SERVICE_ACCOUNT_KEY` のような
+不要なサーバー秘密を載せないための措置。**Functions に環境変数を追加したら
+`scripts/use-env.sh` の `FUNCTIONS_ENV_KEYS` にも追記すること。**
+
+**秘密は `.env` に置かない。** `.env` の値は関数の環境変数としてデプロイされ、閲覧者ロールでも
+Cloud Console / `gcloud functions describe` から読める。外部サービスの API キーや Webhook の
+署名シークレットは Secret Manager に置き、`defineSecret()` で宣言して
+`onRequest({ secrets })` に渡した関数だけにマウントする。
+**秘密を差し替えたら再デプロイが要る**（関数は登録時点のバージョンに固定される）。
+
+<!-- layer:billing:start -->
+
+決済まわりの配線は `apps/functions/src/lib/billing.ts` / `api.ts` にある（手順は
+`.claude/docs/billing.md`）。
+
+<!-- layer:billing:end -->
+
+外部サービスのテスト用キーと本番キーは環境ごとに分ける（Secret Manager は
+Firebase プロジェクトごとに別なので、環境の切り替えでキーも入れ替わる）。
+`production` 以外の `.env` に Stripe の本番キー（`sk_live_` / `rk_live_`）が残っていると
+`yarn env:<環境名>` はエラーで停止する。
+
+**本番ビルドで必須の値は、未設定なら起動時に落とす。** `NEXT_PUBLIC_API_BASE_URL` /
+`EXPO_PUBLIC_API_BASE_URL` は未設定だと Functions エミュレーター（`localhost:5001`）へ
+フォールバックするため、`.env.production` への書き忘れが「本番の全 API が Failed to fetch」
+として現れる。`api-client.ts` は `NODE_ENV === 'production'`（Expo は `__DEV__ === false`）で
+未設定なら `throw` する。Functions 側の `ALLOWED_ORIGINS` と同じ方針。
+
+### framework-backed hosting の env の届き方
+
+`hosting.frameworksBackend` を使う構成では、SSR 用の Cloud Functions を firebase-tools が
+自動生成する。`apps/web/` の env ファイルは**3 通りの届き方**をする。以下は
+firebase-tools 14 の `lib/frameworks/index.js` と `lib/functions/env.js` を読んで確かめたもの。
+
+| 届き方 | 対象のファイル | 効くところ |
+| --- | --- | --- |
+| ビルドに埋め込まれる | Next.js の規約どおり（`.env.local` → `.env.production` → `.env`）。デプロイ中は `.env.local` が退避されるので `.env` | `NEXT_PUBLIC_*` |
+| **関数の環境変数**になる | `.env` / `.env.<Firebase プロジェクト ID>` / `.env.<.firebaserc のエイリアス>` | SSR・middleware |
+| ファイルとして同梱され、実行時に Next が読む | `apps/web/.env.*` 全部（`deploy.sh` は `.env.local` を退避して同梱を防ぐ） | SSR・middleware |
+
+**`next build` はローカルで走り、しかも 2 回走る。** `yarn deploy:<環境名>` の事前チェックで
+1 回（`.env.local` あり）、`firebase deploy` の中でアダプタがもう 1 回
+（`.env.local` は退避済み）。関数へ配られるのは**後者**なので、
+`NEXT_PUBLIC_*` は `apps/web/.env` から読ませる。Cloud Build 側でビルドし直すわけではない。
+
+> アダプタは 2 回目のビルドが非ゼロ終了しても reject しない（`frameworks/next/index.js` の
+> `buildProcess.on("exit", (code) => resolve(code))`）。事前チェックが緑でも、
+> デプロイ時のビルドで値が欠けていないかはデプロイ後の画面で確かめる。
+
+**サーバー専用の値は `apps/web/.env` に置く。** 3 行目の経路（Next が実行時に読む）だけに
+頼ると、`.env.local` が同梱されるかどうかというアダプタの実装に依存する。`use-env.sh` が
+`WEB_SSR_ENV_KEYS` の許可リストで `apps/web/.env` を生成しているのはこのため。
+**SSR で読むサーバー専用の変数を足したら、`scripts/use-env.sh` の `WEB_SSR_ENV_KEYS` にも
+追記すること**（`apps/functions/.env` と同じ）。
+
+> ⚠️ **`apps/web/.env.production` を作らないこと。** `production` は `.firebaserc` の
+> エイリアス名でもあるため、firebase-tools はこれを**関数の環境変数として全文読み込む**。
+> `FIREBASE_*` を含んでいると予約プレフィックスの検査に当たり、`firebase deploy` が
+> `Failed to validate key` で止まる。`.env.<Firebase プロジェクト ID>` も同じ。
+> ビルド時の `NEXT_PUBLIC_*` は `apps/web/.env` で届くので、この経路は要らない。
+
+**`apps/web/.env.*` はデプロイ中だけ退避する。** `apps/web/.env.local` は `.env.<環境名>` の
+全文コピーなので、そのまま同梱されると `FIREBASE_SERVICE_ACCOUNT_KEY` のようなサーバー秘密まで
+関数のソースに入る。`deploy.sh` は `firebase deploy` に入る直前に `apps/web/.env.*` を全部退避し、終了時に戻す
+（`.env.local` だけでなく `.env.production.local` 等も同梱されるため）。
+そのあいだに必要な値は `apps/web/.env` が持つ:
+
+- `next build` が読む `NEXT_PUBLIC_*`（`.env.<環境名>` からプレフィックスで機械的に拾う）
+- SSR 実行時に読むサーバー専用の値（`WEB_SSR_ENV_KEYS` の許可リスト）
+
+**手で `firebase deploy` を叩くとこの退避は効かない。** `yarn deploy:<環境名>` を使うこと
+（`yarn firebase:deploy` も `deploy.sh` を通らない）。
+
+**退避で SSR に届かなくなる値がある。** これまでは `.env.<環境名>` の全キーが `.env.local` 経由で
+関数に同梱され、Next.js が実行時に読んでいた。退避後に届くのは `apps/web/.env` の中身だけなので、
+**`WEB_SSR_ENV_KEYS` に載せ忘れた値は例外もログも出さずに `undefined` になる。**
+`deploy.sh` はデプロイのたびに、届かなくなる非 `NEXT_PUBLIC_*` のキーを一覧で出す。
+Mobile / Functions 専用の値ならそのままでよい。
+
+> 退避の復元は EXIT / INT / TERM トラップで行うが、**本物の Ctrl-C は取りこぼす**
+> （プロセスグループ全体への SIGINT で、待機中の子が死ぬと bash 自身も
+> トラップを通らずに終了する）。そのため退避先は `.deploy-env-stash/` に固定し、
+> 次に `yarn deploy:<環境名>` を実行したときに戻す。すぐ戻したいときは
+> `yarn env:<環境名>` で作り直せる。
+
+配布の内容は `scripts/test-env-distribution.sh` が固定している（どのキーがどのファイルへ行くか、
+秘密が載らないか、許可リストが Cloud Functions の予約語に当たらないか、デプロイ中に
+`.env.local` が退避され終了後に戻るか）。
+
 ## 状態管理（Zustand）
 
-グローバル状態は Zustand で管理。store は `packages/shared/src/stores/` に置き、Web・Mobile で共有する。
+グローバル状態は Zustand で管理する。store は `packages/shared` の `stores` に置き、
+Web・Mobile で共有する。新しい store はそこに作り、`index.ts` から export する。
+
+<!-- layer:firebase:start -->
+
+参考実装は認証状態を持つ `useAuthStore`（`packages/shared/src/stores/auth-store.ts`）。
 
 ```typescript
+// 使い方（どのクライアントコンポーネントからでも）
 import { useAuthStore } from '@geckou/shared/stores'
+
 const { user, loading } = useAuthStore()
 ```
 
-新しい store は `packages/shared/src/stores/` に作成し、`index.ts` から export する。
-
 ## Firebase Storage
 
-ヘルパーは `packages/shared/src/storage/` に集約。
+ファイルアップロード・ダウンロードのヘルパーは `packages/shared/src/storage/` に集約。
 
 ```typescript
 import { uploadFile, deleteFile, getFileUrl } from '@geckou/shared/storage'
 ```
 
+Firebase の初期化は SDK ごとに分けてある（`apps/web/src/lib/firebase-app.ts` が app、
+`firebase.ts` が Auth、`firebase-firestore.ts` が Firestore、`firebase-storage.ts` が Storage）。
+Auth しか要らないページに Firestore SDK が乗らないようにするため。
+**エミュレーターへの接続は各 SDK のモジュールが持つ**が、`NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true`
+のときは `firebase-app.ts` が Firestore / Storage を動的 import して接続を確定させるので、
+利用側で意識する必要はない（本番のバンドルには入らない）。
+
+### アップロードの制限（`storage.rules`）
+
+`users/{uid}/**` への書き込みは本人のみで、さらに次の 2 つを満たすものに限る。
+
+| 制限 | 値 | 理由 |
+| --- | --- | --- |
+| サイズ | 10MB 未満 | 無制限だと課金と悪用の入口になる |
+| 種別 | `image/(png\|jpeg\|gif\|webp\|heic\|heif\|avif)` | 参照実装の想定（アバター・写真）。`heic` / `heif` は iOS のカメラロールの既定なので外さない。`image/*` にしない理由は下記 |
+
+**SVG は意図的に外している。** SVG は `<script>` を含められ、`getDownloadURL` の URL は
+インラインで配信されるため、`firebasestorage.googleapis.com` オリジン上でのスクリプト実行
+（stored XSS）になる。アバター・写真用途なら不要。足すなら配信側の対策
+（`Content-Disposition: attachment` 等）とセットで判断する。
+
+画像以外も置くプロジェクトは `contentType` の列挙を広げる。削除は
+`request.resource` を持たないため、この 2 条件を課さない（`allow delete` を別に書く）。
+拒否ケースは `tests/storage-rules.test.ts` にあり、`yarn test:rules` で検証する。
+
+<!-- layer:firebase:end -->
+
+<!-- layer:mobile:start -->
+
 ## プッシュ通知（FCM）
 
-| 場面 | ファイル |
-|---|---|
-| Mobile受信 | `apps/mobile/src/lib/push-notifications.ts` |
-| Server送信 | `apps/functions/src/lib/push-notifications.ts` |
+| 場面       | ファイル                                       | 用途                          |
+| ---------- | ---------------------------------------------- | ----------------------------- |
+| Mobile受信 | `apps/mobile/src/lib/push-notifications.ts`    | 権限リクエスト・トークン取得  |
+| Server送信 | `apps/functions/src/lib/push-notifications.ts` | FCM 経由で通知送信            |
+
+<!-- layer:mobile:end -->
 
 ## エラー監視（Sentry）
 
-| 場所 | ファイル | パッケージ |
-|---|---|---|
-| Web | `apps/web/src/lib/sentry.ts` | `@sentry/nextjs` |
-| Mobile | `apps/mobile/src/lib/sentry.ts` | `@sentry/react-native` |
-| Functions | `apps/functions/src/lib/sentry.ts` | `@sentry/node` |
+| 場所      | ファイル                             | パッケージ             |
+| --------- | ------------------------------------ | ---------------------- |
+| Web       | `apps/web/src/lib/sentry.ts`        | `@sentry/nextjs`       |
+| Mobile    | `apps/mobile/src/lib/sentry.ts`     | `@sentry/react-native` |
+| Functions | `apps/functions/src/lib/sentry.ts`  | `@sentry/node`         |
 
-※ Sentry パッケージインストール後に各ファイルの `@ts-nocheck` を削除すること。
+※ Sentry パッケージのインストール後、各ファイル先頭の抑制コメントを削除すること。
+Functions / Mobile は `// @ts-nocheck` の 1 行、Web は `// @ts-ignore` と
+直上の `// eslint-disable-next-line` の 2 行。
 
 ## i18n（多言語対応）
 
@@ -108,27 +329,127 @@ import { uploadFile, deleteFile, getFileUrl } from '@geckou/shared/storage'
 
 ```typescript
 import { getTranslation, ja, en } from '@geckou/shared/i18n'
+
 getTranslation(ja, 'common.loading') // → '読み込み中...'
 ```
 
 新しい翻訳キーを追加する場合は `ja.ts` と `en.ts` の両方に追加すること。
 
-## 課金（RevenueCat）
+<!-- layer:billing:start -->
 
-| プラットフォーム | ファイル |
-|---|---|
-| Mobile | `apps/mobile/src/lib/revenuecat.ts` |
-| Web | `apps/web/src/lib/revenuecat.ts`（`'use client'`） |
-| Functions | `apps/functions/src/revenuecat-webhook.ts` |
+## 課金
+
+> セットアップ・実装の手順は `.claude/docs/billing.md` を参照。ここでは構成と設計判断のみ扱う。
+
+### 方針: モバイルは IAP、Web は Stripe
+
+購入経路を2つ持ち、**権利状態は Firestore の `users/{uid}.subscription` に一本化する**。
+
+| 経路 | 決済手段 | 手数料 | 用途 |
+| --- | --- | --- | --- |
+| Mobile アプリ内 | IAP（RevenueCat 経由） | Apple 26% / Google 30%（中小 15%） | アプリ内でその場で買わせたいプロダクト |
+| Web（ブラウザ） | Stripe | 3.6% 前後 | LP・Web サービスから契約させる |
+
+**なぜこの形か。** アプリ内課金は Face ID の1タップで完結するためコンバージョンが圧倒的に高い一方、
+手数料が最も重い。逆に Web からの直接契約はストアが一切関与しないため、手数料はカード決済分だけで済む。
+「アプリでは取りこぼさない、Web に来た人からは安く取る」を両立させるのがこの構成の狙い。
+
+**リンクアウト（アプリ内から Web 決済へ誘導）は採用していない。**
+2025年12月施行のスマホ新法で日本でも解禁されたが、Apple 15% / Google 20% のストア手数料が別途かかるうえ、
+Apple / Google への月次の取引報告（External Purchase Server API / external payments API）を
+恒久的に運用する義務が発生するため、割に合わない。採用する場合はその報告基盤の実装が別途必要になる。
+
+### どちらか一方だけ使う
+
+両方とも環境変数が未設定なら無効になるので、プロダクトに応じて片方だけ使える。
+
+- **Web だけで売る**: `STRIPE_*` のみ設定。RevenueCat の依存は mobile 側に残るが未初期化で無害
+- **アプリ内課金だけ**: `REVENUECAT_*` のみ設定。`/billing/*` エンドポイントは 503 を返す
+
+### ファイル構成
+
+決済ロジックの本体は **[`@geckou/billing`](https://github.com/geckou/kit)**（npm パッケージ）にある。
+権利状態の反映（冪等性・順序制御）・Stripe / RevenueCat Webhook・Checkout / ポータル作成・
+カスタムクレーム同期はパッケージ側で実装され、修正は Renovate の更新 PR として届く
+（`renovate.json5`。→ `.claude/docs/dependencies.md`）。ただし `@geckou/*` が 0.x の間は
+minor が `^` のレンジを跨がないため、Dependency Dashboard で承認するまで PR が出ない。
+リポジトリ内に残るのは配線と、プロジェクトごとに編集するフックのみ。
+
+| 層 | ファイル | 役割 |
+| --- | --- | --- |
+| 共有 | `packages/shared/src/billing/index.ts` | `@geckou/billing/entitlement` の re-export（`isSubscriptionActive` / `hasPlan` / `Subscription` 型） |
+| Functions | `apps/functions/src/lib/billing.ts` | `createBilling()` の配線（env・firebase-admin・フックの注入） |
+| Functions | `apps/functions/src/lib/entitlement-hooks.ts` | 権利変化フック（**派生プロジェクトが編集する場所**） |
+| Functions | `apps/functions/src/api.ts` | Webhook / `/billing/*` の Express アダプタ |
+| Web | `apps/web/src/lib/billing.ts` | Checkout / カスタマーポータルの起動 |
+| Web | `apps/web/src/app/billing/page.tsx` | 購入・管理画面の参考実装 |
+| Mobile | `apps/mobile/src/lib/revenuecat.ts` | IAP の初期化・Firebase UID との紐付け |
+
+### 権利状態の判定
+
+画面側は経路を意識せず、共有ヘルパーだけを見る。
+
+```typescript
+import { isSubscriptionActive } from '@geckou/shared'
+
+if (isSubscriptionActive(user.subscription)) {
+  // 有料機能を出す
+}
+```
+
+`status` は4種類。`cancelled` は「自動更新が止まっただけ」で `currentPeriodEnd` までは利用できる点に注意
+（`isSubscriptionActive` がこの判定を吸収する）。
+
+| status | 意味 | 利用可否 |
+| --- | --- | --- |
+| `active` | 有効 | 可 |
+| `in_grace_period` | 支払い失敗中（リトライ猶予期間。Stripe の `past_due` / RevenueCat の `BILLING_ISSUE`） | `currentPeriodEnd` があればその日時まで可（無ければ可） |
+| `cancelled` | 自動更新が停止 | `currentPeriodEnd` まで可 |
+| `expired` | 失効 | 不可 |
+
+### セキュリティ上の要点
+
+- **`subscription` と `stripeCustomerId` はクライアントから書き込めない**（`firestore.rules` で拒否）。
+  これが無いとユーザーが自分を `active` に書き換えて有料機能を使えてしまう
+- **Webhook は冪等**。処理済みイベントを `billing_events/{source}_{eventId}` に記録し、
+  再送を二重適用しない。反映済みより古いイベントでの上書きも防ぐ
+- **Stripe の署名検証には生のボディが必要**。Cloud Functions では Functions Framework が
+  自前のハンドラより前に JSON をパースするため、後段の `express.raw()` はスキップされ
+  `req.body` はオブジェクトになる。生のボディは `req.rawBody` にしか無いので、
+  `api.ts` の `extractRawBody()` が `req.rawBody ?? req.body` で取り出す
+  （`express.raw()` は Express 単体で動かすとき用。`express.json()` より前に置く）
+- **購入可能な price はサーバー側の許可リスト**（`STRIPE_PRICE_IDS`）で検証する
+- **ルールから権利状態を参照したい場合のみ** `SYNC_SUBSCRIPTION_CLAIMS=true` を設定する。
+  Webhook が Firebase Auth のカスタムクレームにも同期し、`request.auth.token.subscriptionActive`
+  で判定できるようになる（デフォルトは無効。画面の表示制御だけなら Firestore を読めば足りる）
+- **Checkout の戻り先 URL は環境変数で固定**（クライアント入力を使うとオープンリダイレクトになる）
+
+<!-- layer:billing:end -->
+
+## Tailwind CSS / デザイントークン
+
+デザイントークン（色・フォント・角丸等）は `packages/shared/src/theme/index.ts` に集約し、Web・Mobile の両方の Tailwind 設定から参照している。
+
+| 項目 | Web | Mobile |
+|---|---|---|
+| Tailwind バージョン | v4 (`@tailwindcss/postcss`) | v3 (NativeWind v4 が v3 に依存) |
+| 設定ファイル | `apps/web/tailwind.config.ts` | `apps/mobile/tailwind.config.js` |
+| 共有テーマ | `@geckou/shared/theme` を import | `@geckou/shared/theme` を require |
+
+**バージョンが異なるのは意図的。** NativeWind v4 は Tailwind v4 に未対応のため v3 を使う。共有テーマを JS オブジェクトで定義することで、どちらの config 形式にも対応できている。
+
+新しいトークン（spacing、shadow 等）を追加する場合は `packages/shared/src/theme/index.ts` に追加すれば両方に反映される。
 
 ## コンポーネントの整理方針
 
 ```
 components/
-├── icons/        # アイコンコンポーネント
-├── ui/           # 汎用 UI（Button, Modal, Input 等）
+├── icons/        # プロジェクト固有のアイコン
 ├── auth/         # 認証関連（LoginForm, AuthGuard 等）
 └── <feature>/    # 機能別（dashboard/, settings/ 等）
 ```
 
-小規模なうちは `components/` 直下でよい。増えてきたら機能別に分ける。
+**汎用 UI（Button, Modal, Input 等）とアイコンは `@geckou/ui-react` から取る**（`packages/README.md`）。
+`components/` に置くのはプロジェクト固有のものだけ。`components/icons/` も同じで、
+`@geckou/ui-react` に無いアイコンだけを置く。小規模なうちは `components/` 直下でよい。
+増えてきたら機能別に分ける。

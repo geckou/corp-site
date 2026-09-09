@@ -44,12 +44,9 @@ Stop フックは 4 つとも同じ `stop_hook_active` を受け取る。DoD が
 
 ## 層マニフェストを変更したら
 
-`layers.json` を変えたら `node scripts/check-layers.mjs`（実態との一致）を実行する。
-node_modules に依存しないので `yarn install` なしで走る。CI（`docs-check.yml`）でも実行される。
-
-減算の回帰テスト（`scripts/test-layers.sh`）はこのリポジトリでは持っていない。
-テンプレート本体のリポジトリの形を前提にしており、参照方式の派生では成立しないため
-（→ `.templatesyncignore` / geckou/project-starter#326）。
+`layers.json` を変えたら `bash scripts/test-layers.sh`（減算の回帰テスト）と
+`node scripts/check-layers.mjs`（実態との一致）を実行する。
+どちらも node_modules に依存しないので `yarn install` なしで走る。CI でも実行される。
 
 ## フックを変更したら
 
@@ -71,10 +68,65 @@ CI でも実行される。
   「これから作るファイル」を書くものなので、実在しないパスを含むのが正しい）
 - 検査内容: リポジトリ相対パスの言及と、Markdown の相対リンク先
 - gitignore 対象など意図的に存在しないパスは `ALLOW_MISSING` に追加する
+- **テンプレート本体だけが持つファイル**（`scripts/adopt-references.mjs` 等）への言及は
+  参照切れにしない。一覧は `.templatesyncignore` の `template-only:start` / `:end` の範囲が正で、
+  `check-docs.sh` はそこを読むだけ。同期されないファイルを `scripts/` や
+  `.github/workflows/` に足して除外するときは、この範囲の中に書く
+- **採用していない層への言及**も参照切れにしない。`apps/mobile/` のように入れ物ごと
+  無ければ「その層を持たない構成」とみなす。入れ物があって中のファイルだけ無い場合は
+  従来どおり参照切れになる
+
+**この壊れ方はテンプレート本体では観測できない。** 本体には全ファイルが揃っているので
+`check-docs.sh` は緑になり、同期した派生でだけ赤くなる（#322）。`scripts/test-docs-downstream.sh`
+が「テンプレート本体だけが持つファイルを消し、層を外した状態」を作って `check-docs.sh` を回し、
+本体側で検出する。`docs-check.yml` の Docs Check (downstream) が実行する。
 
 `.github/workflows/docs-check.yml` が全 PR で実行する。`ci.yml` と分けているのは、
 `ci.yml` がコードの差分が無い PR で重いステップを飛ばす作りになっており、
 ドキュメントだけの差分ではこの検査まで飛んでしまうため（`ci.yml` の「Detect code changes」）。
+
+## デプロイ先の絞り込みは回帰テストで固定する
+
+`scripts/deploy.sh` は `firebase.json` の `hosting` ターゲットのうち、**環境名と一致する
+1 つだけ**に配る（→ `.claude/docs/git-workflow.md`「Hosting のターゲットは環境名に合わせる」）。
+以前は全ターゲットに配っていて、`yarn deploy:staging` が staging のビルドを production の
+サイトにも出していた。
+
+判断は `scripts/lib/hosting-targets.mjs` に切り出してあり、`bash scripts/test-deploy-targets.sh`
+（`yarn test:deploy-targets`）が検証する。`deploy.sh` 本体は firebase CLI と実プロジェクトが
+無いと流せないため、**選び方だけを切り出してテスト可能にしている。** ターゲットの選び方を
+変えるときはこのテストも足す。CI では `ci.yml` の Deploy Target Test が実行する。
+
+## env の配布内容は回帰テストで固定する
+
+`scripts/use-env.sh` は `.env.<環境名>` を単一の正として各所へ配る。間違えると
+どちらかに倒れ、**どちらも型チェックにもテストにも引っかからない。**
+
+- **足りない**: SSR / Functions で `undefined` になる（本番に出て初めて分かる）
+- **多すぎる**: 秘密が関数の環境変数として載り、閲覧者ロールから読める
+
+とくに framework-backed hosting は env の届き方が 3 通りあり、経路ごとに読まれる
+ファイルが違う（→ `.claude/docs/architecture.md`）。
+`bash scripts/test-env-distribution.sh`（`yarn test:env-distribution`）が検証するのは:
+
+- どのキーがどのファイルへ行くか（許可リストのキーが載り、無いキーの行は書かれない）
+- 生成ファイルにフィクスチャの秘密が載らないこと
+- 環境を切り替えると前の値が消え、新しい値が入ること
+- **デプロイ中に `apps/web/.env.local` が退避され、終了後に戻ること**
+  （`firebase` をスタブに差し替えて `deploy.sh` を実際に流し、`firebase deploy` が
+  呼ばれた時点のファイルの状態を記録して検証する）
+- **許可リストのキーが Cloud Functions の予約語に当たらないこと**
+  （`FIREBASE_*` / `X_GOOGLE_*` / `EXT_*` や `PORT` 等。当たると `firebase deploy` が
+  `Failed to validate key` で止まる）
+
+秘密の検査はフィクスチャに置いた 2 キーを見ているだけなので、**別名の秘密を許可リストへ
+足しても素通りする**。許可リスト（`WEB_SSR_ENV_KEYS` / `FUNCTIONS_ENV_KEYS`）に何かを
+足すときは、テストの緑だけでなく「それは秘密か」を人が見る。
+
+層を持たない構成では、その層のセクションごと飛ばす（`FUNCTIONS_ENV_KEYS` の宣言が
+残っているかで判定）。**このスクリプトに層マーカーの文字列を書かないこと** —
+`remove-layer.mjs` が本物のマーカーとみなし、対応する `end` が無いためファイル末尾まで
+削り落とす。CI では `ci.yml` の Env Distribution Test が実行する。
 
 ## 本体保守で使うスクリプト
 
@@ -88,6 +140,8 @@ node scripts/add-layer.mjs <層>      # 層を足す（テンプレートから�
 
 node scripts/adopt-references.mjs --repo <派生のパス>  # 既存の派生を参照方式へ移行する
 bash scripts/test-adopt-references.sh                 # 上記スクリプトの回帰テスト
+
+bash scripts/test-docs-downstream.sh                  # 派生に同期された状態で check-docs.sh が通るか
 
 yarn release <パッケージのディレクトリ名>...           # タグを打って公開する（通常は自動公開で足りる。複数可）
 bash scripts/install-release-command.sh               # geckou-release をどこからでも使えるようにする
