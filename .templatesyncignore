@@ -5,6 +5,15 @@
 # ベースはテンプレート（geckou/project-starter）の .templatesyncignore。
 # 末尾の「このプロジェクト固有の除外」だけが corp-site の追加分。
 
+# 全部入りの構成を前提に書かれたドキュメントのうち、このリポジトリが自分の版を持つもの。
+# 参照切れは geckou/project-starter#338 で直ったので、それが理由の除外は外した。
+# 残しているのは中身をこのプロジェクト向けに書き換えているため（取り込むと上書きされる）
+#
+#   architecture.md: RevenueCat だけ・Stripe 無しの構成に絞り、マルチサイトデプロイを足してある
+#   workflow.md: 企画書・仕様書・ロードマップの参照先を Notion に差し替えてある
+.claude/docs/architecture.md
+.claude/docs/workflow.md
+
 # プロダクト固有ドキュメント（企画書・仕様書・ロードマップは Notion で管理）
 .claude/docs/questions.md
 .claude/docs/planning.md
@@ -12,17 +21,6 @@
 .claude/docs/roadmap.md
 CLAUDE.md
 README.md
-
-# 全部入りの構成を前提に書かれたドキュメント。このリポジトリは billing 層を採用しているが
-# Stripe 側の実体（apps/functions/src/lib/billing.ts 等）を持たないため、取り込むと
-# docs-check が参照切れで落ちる。テンプレート側の構造の問題なので、直ったら外す
-# （→ geckou/project-starter#338）
-.claude/docs/architecture.md
-.claude/docs/billing.md
-
-# 同期される workflow.md は .claude/docs/ に planning.md / spec.md / roadmap.md がある前提で
-# 書かれている。このリポジトリはそれらを Notion で管理していて持たないため、同じ理由で外す
-.claude/docs/workflow.md
 
 # 環境・Firebase 設定（プロジェクトごとに異なる）
 .env*
