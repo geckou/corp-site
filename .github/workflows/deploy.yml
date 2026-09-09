@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -82,7 +82,7 @@ jobs:
             echo "FIREBASE_SERVICE_ACCOUNT / FIREBASE_TOKEN が未設定のためデプロイをスキップします"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.env.outputs.deploy == 'true'
 
       - uses: actions/setup-node@v4
