@@ -76,13 +76,20 @@ fi
 echo ""
 
 # Node.js バージョンチェック
+# メジャーだけでなく minor も見る。@commitlint/* が engines.node で >=22.12.0 を
+# 要求するため、22.0〜22.11 はここを通ったあと yarn install が engines で落ちる
 REQUIRED_NODE=22
-CURRENT_NODE=$(node -v 2>/dev/null | cut -d'.' -f1 | tr -d 'v')
+REQUIRED_NODE_MINOR=12
+CURRENT_NODE=$(node -v 2>/dev/null | tr -d 'v')
+CURRENT_NODE_MAJOR=$(printf '%s' "$CURRENT_NODE" | cut -d'.' -f1)
+CURRENT_NODE_MINOR=$(printf '%s' "$CURRENT_NODE" | cut -d'.' -f2)
 if [ -z "$CURRENT_NODE" ]; then
   echo "[warn] Node.js がインストールされていません"
-  echo "  → Node.js $REQUIRED_NODE 以上をインストールしてください"
-elif [ "$CURRENT_NODE" -lt "$REQUIRED_NODE" ]; then
-  echo "[warn] Node.js v$CURRENT_NODE が検出されました（v$REQUIRED_NODE 以上が必要）"
+  echo "  → Node.js $REQUIRED_NODE.$REQUIRED_NODE_MINOR 以上をインストールしてください"
+elif [ "$CURRENT_NODE_MAJOR" -lt "$REQUIRED_NODE" ] ||
+  { [ "$CURRENT_NODE_MAJOR" -eq "$REQUIRED_NODE" ] &&
+    [ "$CURRENT_NODE_MINOR" -lt "$REQUIRED_NODE_MINOR" ]; }; then
+  echo "[warn] Node.js v$CURRENT_NODE が検出されました（v$REQUIRED_NODE.$REQUIRED_NODE_MINOR 以上が必要）"
   echo "  → nvm use $REQUIRED_NODE または nvm install $REQUIRED_NODE"
 else
   echo "[ok] Node.js v$CURRENT_NODE"
@@ -218,7 +225,7 @@ setup_branch_protection() {
     --input - > /dev/null; then
     echo "[done] production ブランチに保護ルール（$RULESET_NAME）を設定しました"
     echo "  - Required status checks: guard / $CI_CONTEXT"
-    echo "  - PR 必須 + 1名以上のレビュー承認"
+    echo "  - PR 必須（レビュー承認は 0 件。複数人で回すなら UI で増やす）"
     echo "  - force push 禁止"
     echo "  - ブランチ削除禁止"
   else
@@ -321,4 +328,11 @@ echo "デプロイ:"
 echo "  yarn deploy:develop     → develop にデプロイ"
 echo "  yarn deploy:staging     → staging にデプロイ"
 echo "  yarn deploy:production  → production にデプロイ"
+echo ""
+# ruleset と違い、値を人が用意するため自動化できない。未登録だと Template Sync が
+# 一度も動かないまま気付かれないので、セットアップの最後に案内だけ出す
+echo "Template Sync の設定（派生プロジェクトのみ）:"
+echo "  未登録だとテンプレートの更新が一度も届かない。GitHub App（推奨）か PAT"
+echo "  あわせて template-sync ラベルを作る（無いと初回の PR 作成が失敗する）"
+echo "  手順は .claude/docs/git-workflow.md「Template Sync の有効化」"
 echo ""
