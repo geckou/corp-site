@@ -188,7 +188,7 @@ export default function Home() {
     >
       <TopBackground
         ref={topBackgroundRef}
-        className="fixed left-0 top-0"
+        className="fixed top-0 left-0"
         scrollPercentage={scrollPercentage}
       />
       <LogoArea data-section-id="logo" onScrollTo={scrollToSection} />
@@ -207,7 +207,7 @@ export default function Home() {
             </div>
           ) : null
         })}
-        <div className="globe-wrap max-w-contents h-globe-h z-contents pointer-events-none sticky bottom-0 mx-auto w-full overflow-hidden">
+        <div className="globe-wrap pointer-events-none sticky bottom-0 z-contents mx-auto h-globe-h w-full max-w-contents overflow-hidden">
           <BackgroundGlobe rotate={globeRotateValue} />
         </div>
         <GlobalNav onScrollTo={scrollToSection} />

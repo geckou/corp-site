@@ -12,7 +12,7 @@ out/
 dist/
 
 # production
-build
+/build
 
 # misc
 .DS_Store
@@ -24,6 +24,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # env
+.deploy-env-stash/
 .env
 .env.local
 .env.develop
@@ -32,6 +33,8 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+# Firebase エミュレーターが読むシークレット（本番の値は Secret Manager）
+.secret.local
 
 # typescript
 *.tsbuildinfo
@@ -48,7 +51,6 @@ firebase-emulator-data/
 .turbo
 
 # claude
-.claude/settings.json
 .claude/settings.local.json
 
 # functions build

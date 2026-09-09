@@ -34,7 +34,7 @@ export const GlobalNav = ({ onScrollTo }: GlobalNavProps) => {
         />
       </div>
       <nav
-        className={`gap-sp-larger bottom-sp-large global-nav pointer-events-none fixed right-0 flex flex-col items-end opacity-0 ${isOpenedNav ? 'open' : ''}`}
+        className={`global-nav pointer-events-none fixed right-0 bottom-sp-large flex flex-col items-end gap-sp-larger opacity-0 ${isOpenedNav ? 'open' : ''}`}
       >
         <button
           className="global-nav-link"

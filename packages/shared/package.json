@@ -57,7 +57,8 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@geckou/eslint-config": "^0.4.0",
     "typescript": "^5.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.0.0"
   }
 }

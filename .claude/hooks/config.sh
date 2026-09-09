@@ -1,0 +1,53 @@
+#!/usr/bin/env sh
+# フックのプロジェクト固有設定。各フックが自身のディレクトリから読み込む。
+#
+# ここに集めているのは「フックのロジック」ではなく「このプロジェクトのスタックに依存する値」。
+# フック本体（*.sh）はスタック非依存に保ち、Next.js / Firebase / yarn といった前提は
+# 全てこのファイルに置く。派生プロジェクトがスタックを変えたときに直すのはここだけになる。
+#
+# このファイルは .templatesyncignore に登録してあるため、テンプレート更新で上書きされない。
+# 逆に、テンプレート側で新しい設定項目が増えても自動では流れてこないので、
+# フック本体は「この項目が無くても動く」ようにデフォルト値を持っている。
+#
+# 各項目は環境変数で一時的に上書きできる（例: HOOK_RUNNER=npm）。テスト用途にも使う。
+
+# 実行するパッケージマネージャ（npm / pnpm / bun 等に変更可）。
+# タスクは `<HOOK_RUNNER> run <タスク名>` の形で呼ばれるため、run を解釈できるものを指定する
+HOOK_RUNNER=${HOOK_RUNNER:-'yarn'}
+
+# DoD（機能の完了条件）として stop-dod-check.sh が実行するタスク。空白区切り
+HOOK_DOD_TASKS=${HOOK_DOD_TASKS:-'type-check lint test'}
+
+# DoD の対象になる「コードファイル」の拡張子。grep -E の選択肢としてそのまま使う。
+# ドキュメントのみの変更で重い DoD を走らせないための絞り込み
+HOOK_CODE_EXTENSIONS=${HOOK_CODE_EXTENSIONS:-'ts|tsx|js|jsx|mjs|cjs|rules'}
+
+# 変更時に検証コマンドをリマインドするパスと、その文言。
+# 1行 = <パスパターン><TAB><メッセージ>。パスパターンはファイル・ディレクトリのどちらでもよく、
+# 絶対パス / リポジトリ相対パスの両方にマッチする。
+# このリポジトリはルールテストを持たない方針（→ .claude/docs/questions.md Q-002）なので、
+# firestore.rules の変更時はエミュレーターでの手動確認を促す
+HOOK_WATCH_PATHS=${HOOK_WATCH_PATHS:-'
+firestore.rules	firestore.rules が変更されました。ルールテストは持たない方針のため、yarn firebase:emulators で許可/拒否を手で確認してください。
+packages/shared	packages/shared が変更されました。全 workspace に影響するため yarn type-check を実行してください。
+'}
+
+# 確認事項キューの場所（CLAUDE.md「自律性の境界」）。
+# ドキュメントを Notion 等で持つ派生プロジェクトでも、キューだけはリポジトリ内に置く前提。
+# ファイルが存在しなければ関連フックは何もしない
+HOOK_QUESTIONS_FILE=${HOOK_QUESTIONS_FILE:-'.claude/docs/questions.md'}
+
+# ロードマップ（機能ステータス表）の場所。stop-roadmap-reminder.sh が更新の有無を見る。
+# 確認事項キューと同じく、ドキュメントを外部サービスで持つ派生でもここだけはリポジトリ内に置く前提
+# このリポジトリのロードマップは Notion にあるためリポジトリ内には無い。
+# ファイルが存在しない間、stop-roadmap-reminder.sh は何もしない
+HOOK_ROADMAP_FILE=${HOOK_ROADMAP_FILE:-'.claude/docs/roadmap.md'}
+
+# PR の有無を見る stop-pr-reminder.sh が使うリモート名と、マージ先のブランチ。
+# 派生プロジェクトが既定ブランチを main にしている場合はここを変える
+HOOK_PR_REMOTE=${HOOK_PR_REMOTE:-'origin'}
+HOOK_PR_BASE_BRANCH=${HOOK_PR_BASE_BRANCH:-'production'}
+
+# GitHub Enterprise を使う場合のホスト名（例: ghe.example.com）。
+# 未設定なら github.com の remote だけを見る
+HOOK_PR_GITHUB_HOST=${HOOK_PR_GITHUB_HOST:-''}

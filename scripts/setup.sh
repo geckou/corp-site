@@ -18,15 +18,29 @@ if grep -q "your-project-develop" .firebaserc 2>/dev/null; then
   read -p "staging の Project ID (後で設定する場合は Enter): " STG_ID
   read -p "production の Project ID (後で設定する場合は Enter): " PROD_ID
 
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    [ -n "$DEV_ID" ] && sed -i '' "s/your-project-develop/$DEV_ID/g" .firebaserc
-    [ -n "$STG_ID" ] && sed -i '' "s/your-project-staging/$STG_ID/g" .firebaserc
-    [ -n "$PROD_ID" ] && sed -i '' "s/your-project-production/$PROD_ID/g" .firebaserc
-  else
-    [ -n "$DEV_ID" ] && sed -i "s/your-project-develop/$DEV_ID/g" .firebaserc
-    [ -n "$STG_ID" ] && sed -i "s/your-project-staging/$STG_ID/g" .firebaserc
-    [ -n "$PROD_ID" ] && sed -i "s/your-project-production/$PROD_ID/g" .firebaserc
-  fi
+  # 置換後の文字列は入力そのもの。sed の特殊文字（/ & \ 改行）を素通しすると
+  # .firebaserc が壊れる（貼り付けミスで / が入るだけで起きる）
+  escape_replacement() {
+    printf '%s' "$1" | sed -e 's/[\\&/]/\\&/g' -e 's/$/\\/' | sed -e '$s/\\$//'
+  }
+
+  replace_project_id() {
+    placeholder=$1
+    value=$2
+    [ -n "$value" ] || return 0
+
+    escaped=$(escape_replacement "$value")
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sed -i '' "s/$placeholder/$escaped/g" .firebaserc
+    else
+      sed -i "s/$placeholder/$escaped/g" .firebaserc
+    fi
+  }
+
+  replace_project_id your-project-develop "$DEV_ID"
+  replace_project_id your-project-staging "$STG_ID"
+  replace_project_id your-project-production "$PROD_ID"
 
   echo "[done] .firebaserc を更新しました"
 else
@@ -62,13 +76,20 @@ fi
 echo ""
 
 # Node.js バージョンチェック
-REQUIRED_NODE=20
-CURRENT_NODE=$(node -v 2>/dev/null | cut -d'.' -f1 | tr -d 'v')
+# メジャーだけでなく minor も見る。@commitlint/* が engines.node で >=22.12.0 を
+# 要求するため、22.0〜22.11 はここを通ったあと yarn install が engines で落ちる
+REQUIRED_NODE=22
+REQUIRED_NODE_MINOR=12
+CURRENT_NODE=$(node -v 2>/dev/null | tr -d 'v')
+CURRENT_NODE_MAJOR=$(printf '%s' "$CURRENT_NODE" | cut -d'.' -f1)
+CURRENT_NODE_MINOR=$(printf '%s' "$CURRENT_NODE" | cut -d'.' -f2)
 if [ -z "$CURRENT_NODE" ]; then
   echo "[warn] Node.js がインストールされていません"
-  echo "  → Node.js $REQUIRED_NODE 以上をインストールしてください"
-elif [ "$CURRENT_NODE" -lt "$REQUIRED_NODE" ]; then
-  echo "[warn] Node.js v$CURRENT_NODE が検出されました（v$REQUIRED_NODE 以上が必要）"
+  echo "  → Node.js $REQUIRED_NODE.$REQUIRED_NODE_MINOR 以上をインストールしてください"
+elif [ "$CURRENT_NODE_MAJOR" -lt "$REQUIRED_NODE" ] ||
+  { [ "$CURRENT_NODE_MAJOR" -eq "$REQUIRED_NODE" ] &&
+    [ "$CURRENT_NODE_MINOR" -lt "$REQUIRED_NODE_MINOR" ]; }; then
+  echo "[warn] Node.js v$CURRENT_NODE が検出されました（v$REQUIRED_NODE.$REQUIRED_NODE_MINOR 以上が必要）"
   echo "  → nvm use $REQUIRED_NODE または nvm install $REQUIRED_NODE"
 else
   echo "[ok] Node.js v$CURRENT_NODE"
@@ -92,41 +113,86 @@ fi
 
 echo ""
 
-# GitHub ブランチ保護ルール設定
-setup_branch_protection() {
+# gh が使えるかと、対象リポジトリ（REPO）を確かめる。
+# 保護ルールの設定はこの後に 2 つ続くので、前提の判定はここに 1 か所だけ置く
+# （片方の関数の早期 return にぶら下げると、その分岐に入ったときもう片方が
+#   一度も呼ばれない。「production の保護は設定済み」の派生で release/* の
+#   保護が永久に提案されなくなる形になっていた）
+detect_repo() {
+  # gh CLI の存在チェック
   if ! command -v gh &> /dev/null; then
     echo "[skip] GitHub CLI (gh) がインストールされていません"
     echo "  → brew install gh でインストール後、手動でブランチ保護を設定してください"
-    return
+    echo "  → https://docs.github.com/ja/repositories/configuring-branches-and-merges-in-your-repository/managing-a-branch-rule/managing-a-branch-protection-rule"
+    return 1
   fi
 
+  # gh の認証チェック
   if ! gh auth status &> /dev/null; then
     echo "[skip] GitHub CLI が未認証です"
     echo "  → gh auth login で認証後、再度 yarn setup を実行してください"
-    return
+    return 1
   fi
 
+  # リモートURLからリポジトリを検出
   REMOTE_URL=$(git remote get-url origin 2>/dev/null || true)
   if [ -z "$REMOTE_URL" ]; then
     echo "[skip] git remote origin が設定されていません"
-    return
+    return 1
   fi
 
+  # owner/repo を抽出（BSD sed は非貪欲量指定子 .+? を解釈できないため多段置換。末尾の / と .git も除去）
   REPO=$(echo "$REMOTE_URL" | sed -E 's#.*github\.com[:/]##; s#/$##; s#\.git$##')
   if [ -z "$REPO" ]; then
     echo "[skip] GitHub リポジトリを検出できませんでした"
-    return
+    return 1
   fi
 
   echo "リポジトリ: $REPO"
+  return 0
+}
 
+# GitHub ブランチ保護ルール設定
+setup_branch_protection() {
+  # production ブランチの存在チェック
   if ! gh api "repos/$REPO/branches/production" &> /dev/null; then
     echo "[skip] production ブランチがまだ存在しません"
+    echo "  → production ブランチを作成後、再度 yarn setup を実行してください"
     return
   fi
 
-  if gh api "repos/$REPO/branches/production/protection" &> /dev/null 2>&1; then
-    echo "[skip] production ブランチの保護ルールは設定済みです"
+  # 保護の定義は .github/rulesets/production.json に一本化してある。
+  # ここで legacy の branch protection API を別に叩くと required check 名が
+  # 二重管理になり、片方だけ古い名前（"ci"）のまま残ると production への PR が
+  # 存在しないチェックを待ち続けて永遠にマージできなくなる
+  RULESET_FILE="$(dirname "$0")/../.github/rulesets/production.json"
+  if [ ! -f "$RULESET_FILE" ]; then
+    echo "[skip] $RULESET_FILE が見つかりません"
+    return
+  fi
+
+  # require() はモジュール解決なので、相対パス（yarn setup = bash scripts/setup.sh）だと
+  # 必ず MODULE_NOT_FOUND になる。ファイルとして読む
+  RULESET_NAME=$(node -p \
+    "JSON.parse(require('fs').readFileSync('$RULESET_FILE','utf8')).name" \
+    2>/dev/null || echo 'production-protection')
+
+  # required status check の名前は CI の呼び方で変わる。
+  #   参照形（reusable workflow を uses で呼ぶ）      -> 'ci / ci'
+  #   ci.yml が pull_request で直接動く形（テンプレ本体・未移行の派生） -> 'ci'
+  # 実態と違う名前を要求すると、そのチェックは永久に報告されず
+  # production への PR が Pending のままマージできなくなる
+  CI_WORKFLOW="$(dirname "$0")/../.github/workflows/ci.yml"
+  CI_CONTEXT='ci'
+  if grep -Eq '^[[:space:]]*uses:[[:space:]]*[^[:space:]]+/\.github/workflows/ci\.yml@' \
+    "$CI_WORKFLOW" 2>/dev/null; then
+    CI_CONTEXT='ci / ci'
+  fi
+
+  # 既存の ruleset チェック
+  if gh api "repos/$REPO/rulesets" --jq '.[].name' 2>/dev/null |
+    grep -qx "$RULESET_NAME"; then
+    echo "[skip] production ブランチの保護ルール（$RULESET_NAME）は設定済みです"
     return
   fi
 
@@ -136,37 +202,98 @@ setup_branch_protection() {
     return
   fi
 
-  if gh api "repos/$REPO/branches/production/protection" \
-    --method PUT \
-    --input - <<'JSON' > /dev/null
-{
-  "required_status_checks": {
-    "strict": true,
-    "contexts": ["CI / ci"]
-  },
-  "enforce_admins": true,
-  "required_pull_request_reviews": {
-    "required_approving_review_count": 1
-  },
-  "restrictions": null,
-  "allow_force_pushes": false,
-  "allow_deletions": false
-}
-JSON
-  then
-    echo "[done] production ブランチに保護ルールを設定しました"
-    echo "  - CI (ci ジョブ) パス必須 (strict: true)"
-    echo "  - PR 必須 + 1名以上のレビュー承認"
-    echo "  - 直接 push 禁止"
+  # ruleset を取り込む。context だけはこのリポジトリの CI の呼び方に合わせる
+  # （set -e 環境下でも失敗時に else 節へ到達できるよう if で直接判定する）
+  RULESET_BODY=$(node -e "
+    const fs = require('fs')
+    const ruleset = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'))
+    const context = process.argv[2]
+
+    for (const rule of ruleset.rules ?? []) {
+      if (rule.type !== 'required_status_checks') continue
+
+      rule.parameters.required_status_checks = (
+        rule.parameters.required_status_checks ?? []
+      ).map((check) => (check.context === 'ci / ci' ? { context } : check))
+    }
+
+    process.stdout.write(JSON.stringify(ruleset))
+  " "$RULESET_FILE" "$CI_CONTEXT")
+
+  if printf '%s' "$RULESET_BODY" | gh api "repos/$REPO/rulesets" \
+    --method POST \
+    --input - > /dev/null; then
+    echo "[done] production ブランチに保護ルール（$RULESET_NAME）を設定しました"
+    echo "  - Required status checks: guard / $CI_CONTEXT"
+    echo "  - PR 必須（レビュー承認は 0 件。複数人で回すなら UI で増やす）"
     echo "  - force push 禁止"
     echo "  - ブランチ削除禁止"
   else
     echo "[error] ブランチ保護の設定に失敗しました"
     echo "  → リポジトリの Admin 権限があるか確認してください"
+    echo "  → Free プランのプライベートリポジトリでは Rulesets を使えません"
+    echo "    （.claude/docs/git-workflow.md「マージルールの強制」を参照）"
+  fi
+
+  # legacy の branch protection が残っていると required check 名が二重管理になる
+  if gh api "repos/$REPO/branches/production/protection" > /dev/null 2>&1; then
+    echo "[warn] legacy の branch protection が残っています"
+    echo "  → ruleset と二重管理になります。GitHub の Settings > Branches から削除するか、"
+    echo "    gh api repos/$REPO/branches/production/protection --method DELETE"
   fi
 }
 
-setup_branch_protection
+# release/* / hotfix/* の保護ルール設定。
+#
+# CLAUDE.md「マージルール」の「release/* への直接コミット・push は禁止」は
+# pre-git-guard.sh の承認確認だけでは支えられない（GitHub UI や他のクライアントからは
+# 素通りする）。release/* への push は staging デプロイを発火するため、
+# 未レビューの変更がそのまま staging に載る経路になる。サーバー側でも塞ぐ。
+#
+# ブランチ作成そのものは禁止しない（creation ルールを入れていない）。
+# production から切って feat/* をマージした結果の初回 push は「作成」なので通り、
+# 以降の更新だけが PR 経由に限定される
+setup_release_protection() {
+  RELEASE_RULESET_FILE="$(dirname "$0")/../.github/rulesets/release.json"
+  if [ ! -f "$RELEASE_RULESET_FILE" ]; then
+    echo "[skip] $RELEASE_RULESET_FILE が見つかりません"
+    return
+  fi
+
+  RELEASE_RULESET_NAME=$(node -p \
+    "JSON.parse(require('fs').readFileSync('$RELEASE_RULESET_FILE','utf8')).name" \
+    2>/dev/null || echo 'release-protection')
+
+  if gh api "repos/$REPO/rulesets" --jq '.[].name' 2>/dev/null |
+    grep -qx "$RELEASE_RULESET_NAME"; then
+    echo "[skip] release/* の保護ルール（$RELEASE_RULESET_NAME）は設定済みです"
+    return
+  fi
+
+  read -p "release/* と hotfix/* に保護ルール（PR 必須）を設定しますか？ (Y/n): " PROTECT_RELEASE
+  if [ "$PROTECT_RELEASE" = "n" ] || [ "$PROTECT_RELEASE" = "N" ]; then
+    echo "[skip] release/* の保護ルールをスキップしました"
+    return
+  fi
+
+  if gh api "repos/$REPO/rulesets" \
+    --method POST \
+    --input "$RELEASE_RULESET_FILE" > /dev/null; then
+    echo "[done] release/* と hotfix/* に保護ルール（$RELEASE_RULESET_NAME）を設定しました"
+    echo "  - 更新は PR 必須（QA 修正は fix/* を切って PR でマージする）"
+    echo "  - ブランチの作成（production から切った初回 push）は従来どおり通る"
+  else
+    echo "[error] release/* の保護ルールの設定に失敗しました"
+    echo "  → リポジトリの Admin 権限があるか確認してください"
+    echo "  → Free プランのプライベートリポジトリでは Rulesets を使えません"
+    echo "    （.claude/docs/git-workflow.md「マージルールの強制」を参照）"
+  fi
+}
+
+if detect_repo; then
+  setup_branch_protection
+  setup_release_protection
+fi
 
 echo ""
 
@@ -177,7 +304,8 @@ if [ "$INSTALL" != "n" ] && [ "$INSTALL" != "N" ]; then
   echo ""
   echo "[done] 依存関係をインストールしました"
 
-  # packages/shared の dist を生成
+  # packages/shared の dist を生成（tailwind.config.js などの Node ランタイム
+  # から `require('@geckou/shared/theme')` を解決可能にするため）
   yarn workspace @geckou/shared build
   echo "[done] packages/shared をビルドしました"
 fi
@@ -200,4 +328,11 @@ echo "デプロイ:"
 echo "  yarn deploy:develop     → develop にデプロイ"
 echo "  yarn deploy:staging     → staging にデプロイ"
 echo "  yarn deploy:production  → production にデプロイ"
+echo ""
+# ruleset と違い、値を人が用意するため自動化できない。未登録だと Template Sync が
+# 一度も動かないまま気付かれないので、セットアップの最後に案内だけ出す
+echo "Template Sync の設定（派生プロジェクトのみ）:"
+echo "  未登録だとテンプレートの更新が一度も届かない。GitHub App（推奨）か PAT"
+echo "  あわせて template-sync ラベルを作る（無いと初回の PR 作成が失敗する）"
+echo "  手順は .claude/docs/git-workflow.md「Template Sync の有効化」"
 echo ""

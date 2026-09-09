@@ -1,21 +1,4 @@
-import tseslint from 'typescript-eslint'
+// 中身はテンプレート側の共有設定（@geckou/eslint-config）を参照する。コピーしない。
+import geckou from '@geckou/eslint-config'
 
-export default tseslint.config(
-  { ignores: ['dist/', 'eslint.config.mjs'] },
-  ...tseslint.configs.recommended,
-  {
-    rules: {
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        { argsIgnorePattern: '^_' },
-      ],
-      '@typescript-eslint/ban-ts-comment': [
-        'error',
-        {
-          'ts-ignore': 'allow-with-description',
-          'ts-nocheck': 'allow-with-description',
-        },
-      ],
-    },
-  }
-)
+export default geckou

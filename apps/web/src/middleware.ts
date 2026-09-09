@@ -42,7 +42,7 @@ const PROTECTED_PATHS = ['/dashboard']
 
 // 専用 Basic 認証で保護するパス
 const PATH_BASIC_AUTH = [
-  { path: '/contact-test', credentials: () => process.env.CONTACT_TEST_AUTH },
+  { path: '/contact-sample', credentials: () => process.env.CONTACT_TEST_AUTH },
 ]
 
 export function middleware(request: NextRequest) {

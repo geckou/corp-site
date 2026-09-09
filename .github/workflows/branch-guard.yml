@@ -1,0 +1,55 @@
+name: Branch Guard
+
+# マージルール（CLAUDE.md / .claude/docs/git-workflow.md）の機械的チェック。
+#
+# 注意: Free プランのプライベートリポジトリでは Required status checks が使えないため、
+# このワークフローは「赤い ✗ による可視化」であり、物理的なマージブロックではない。
+# 対応プラン（Pro/Team/Enterprise またはパブリックリポジトリ）では
+# .github/rulesets/production.json を取り込んで強制する（git-workflow.md 参照）。
+
+on:
+  pull_request:
+    branches: [production]
+
+# GITHUB_TOKEN は既定でこのワークフローの用途（チェックアウトと検査）に必要な
+# 読み取りだけに絞る。明記しないとリポジトリ既定の権限（permissive なら
+# contents: write）で動くため、install / build が実行する任意のコードに
+# 書き込み権限のトークンが渡る
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    # テンプレート本体（geckou/project-starter）はマージルールの適用外（CLAUDE.md 参照）
+    if: github.repository != 'geckou/project-starter'
+
+    steps:
+      - name: Check head branch
+        # ブランチ名には $ や ` 等のメタ文字を含められるため、${{ }} をスクリプトへ
+        # 直接展開せず env 経由のクォート付き変数として参照する（シェル注入対策）
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          case "$HEAD_REF" in
+            release/*|hotfix/*)
+              echo "OK: $HEAD_REF から production への PR は許可されています"
+              ;;
+            chore/template_sync*)
+              # Template Sync が作る PR。テンプレート更新の取り込みはリリース単位に
+              # 束ねる意味が薄いため、renovate/* と同じ扱いで許可する
+              # （production へのマージは本番デプロイを発火するので、タイミングは人が選ぶ）
+              echo "OK: $HEAD_REF はテンプレート更新の取り込みのため許可されています"
+              ;;
+            renovate/*)
+              # 依存更新（Renovate）はプロダクトの機能変更ではなく、リリース単位に
+              # 束ねる意味が薄いため例外として許可する。ただし production への
+              # マージは本番デプロイを発火するので、マージのタイミングは人が選ぶ
+              # （自動マージは既定で無効。.claude/docs/dependencies.md 参照）
+              echo "OK: $HEAD_REF は依存更新のため許可されています"
+              ;;
+            *)
+              echo "::error::production への PR は release/* または hotfix/* からのみ許可されます（現在: $HEAD_REF）。詳細は .claude/docs/git-workflow.md を参照してください。"
+              exit 1
+              ;;
+          esac

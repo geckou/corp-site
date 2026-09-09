@@ -4,7 +4,7 @@
   "private": true,
   "main": "dist/index.js",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --external:firebase-admin --external:firebase-functions --external:express --external:cors",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --outfile=dist/index.js --external:firebase-admin --external:firebase-functions --external:express --external:cors",
     "dev": "yarn build && firebase emulators:start --only functions",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
@@ -15,7 +15,7 @@
     "lint:fix": "eslint . --fix"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "dependencies": {
     "@geckou/shared": "*",
@@ -25,12 +25,13 @@
     "firebase-functions": "^6.0.0"
   },
   "devDependencies": {
+    "@geckou/eslint-config": "^0.4.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
-    "@types/node": "^20.0.0",
-    "esbuild": "^0.25.0",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.0",
     "firebase-functions-test": "^3.3.0",
     "typescript": "^5.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.0.0"
   }
 }
