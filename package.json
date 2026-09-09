@@ -42,7 +42,6 @@
     "check:docs": "bash scripts/check-docs.sh"
   },
   "resolutions": {
-    "sharp": ">=0.35.4",
     "tar": ">=7.5.11",
     "@xmldom/xmldom": ">=0.8.12",
     "@tootallnate/once": ">=3.0.1",

@@ -20,7 +20,8 @@
     "@revenuecat/purchases-js": "^0.18.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@geckou/eslint-config": "^0.4.0",

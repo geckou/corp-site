@@ -97,15 +97,6 @@ node -e "
   });
 "
 
-# framework-backed hosting のアダプタは .firebase/<サイト>/functions を作って
-# そこで npm install する。その package.json はルートの依存から組まれるため、
-# firebase-frameworks の peerOptional sharp@"^0.32 || ^0.33" と、next が要求して
-# 実際に入っている sharp@0.35.x が衝突して ERESOLVE で止まる。
-#
-# 生成先の .npmrc は置けないので環境変数で渡す（npm は NPM_CONFIG_* を読む）。
-# sharp を ^0.33 に戻す手もあるが、0.35.4 はセキュリティ更新で入っている
-export NPM_CONFIG_LEGACY_PEER_DEPS=true
-
 echo "[deploy] Firebase にデプロイ中..."
 
 # framework-backed hosting (firebase.json の frameworksBackend) に必要
