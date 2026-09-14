@@ -104,12 +104,60 @@ git merge origin/release/1.0.0      # そのリリースに載せる場合のみ
 
 ## マルチ環境（develop / staging / production）
 
-Firebase プロジェクトを3つ作成し、環境ごとに使い分ける。
-**環境とブランチは 1対1 ではない。**ブランチの種類に応じてデプロイ先が決まる。
+環境は `develop` / `staging` / `production` の3つ。**環境とブランチは 1対1 ではない。**
+ブランチの種類に応じてデプロイ先が決まる。
+
+### Firebase プロジェクトの持ち方は2通りある
+
+環境をどう Firebase プロジェクトへ割り当てるかは、**プロジェクトの規模で選ぶ**。
+どちらも `.firebaserc` の `projects` で表す（`yarn setup` が対話で聞く）。
+
+| | **A: 環境ごとにプロジェクトを分ける** | **B: 1 プロジェクトに相乗りさせる** |
+| --- | --- | --- |
+| Firebase プロジェクト | 3つ | 1つ |
+| Hosting | プロジェクトごとに 1 サイト | **環境ごとにサイトを分ける必要がある**（手動設定。分けないと環境を配り分けられない）|
+| 本番データ・本番ユーザー | 触れない | develop / staging から**触れる** |
+| Auth のユーザープール | 環境ごとに分断（本番と同じアカウントで開発時の確認ができない）| 共通 |
+| Functions / Firestore ルール | 環境ごとに検証できる | **環境で分けられない**（全環境で同じもの）|
+| モバイルの `GoogleService-Info.plist` / `google-services.json` | 環境ごとに必要（Expo の設定と配信構成も分岐する）| 1セット |
+| サービスアカウント発行と IAM 付与（→「先にサービスアカウントへ IAM ロールを付与する」）| プロジェクトごとに繰り返す | 1回 |
+| Blaze の課金先・予算アラート・GCP API 有効化 | 3つ | 1つ |
+| Firestore のデータ投入・インデックス作成 | 環境ごと | 1回 |
+
+**A が既定**（`.firebaserc` のプレースホルダも A）。本番データを壊しうる操作を仕組みで
+遮断できるため、本番に実ユーザーのデータが乗るなら A を選ぶ。**B は、その遮断を
+「Functions / Firestore を環境で検証できない」というトレードオフと引き換えに手放す代わりに、
+上表の右列ぶんの初期構築・維持コストを 1/3 にする。** LP・社内ツール・PoC のように
+関数とルールがほとんど動かないものでは、A のコストが機能開発より重くなることがある。
+
+```jsonc
+// A: 環境ごとにプロジェクトを分ける（既定）
+"projects": { "default": "myapp-develop", "develop": "myapp-develop", "staging": "myapp-staging", "production": "myapp-production" }
+
+// B: 1 プロジェクトに相乗りさせる（Hosting サイトで分ける。→「Hosting のターゲットは環境名に合わせる」）
+"projects": { "default": "myapp", "develop": "myapp", "staging": "myapp", "production": "myapp" }
+```
+
+> ⚠️ **B では `functions` / `firestore` / `storage` が環境で分かれない。** `deploy.sh` は
+> `.firebaserc` を読んでこれを検出し、**同じプロジェクトを共有する環境のうち最も本番側の
+> 1つ（通常は `production`）以外では、この3つを既定のデプロイ対象から外す**
+> （→「デプロイ対象は `.firebaserc` の構成から決まる」）。`yarn deploy:develop` が
+> 本番の関数とルールを上書きしないのは、この絞り込みのおかげ。**外した対象は
+> `--only` で明示すれば配れる**ので、遮断ではなく「既定を安全側に倒す」だけ。
+
+> ⚠️ **B では Hosting サイトを分けるまで、配る側以外の環境は hosting も配れない。** サイトが
+> 1 つのままだと `develop` も `production` も同じサイトを指すため、`yarn deploy:develop` が
+> 本番サイトを develop のビルドで上書きする。`deploy.sh` は **`firebase.json` の `hosting` に
+> その環境名のターゲット（`target` / `site`）があるか**を見て、無ければ `hosting` も既定から
+> 外し、配る前に止まる（配る側 = `production` は止まらない）。サイトの分け方は
+> 「Hosting のターゲットは環境名に合わせる」。
+
+後から A へ移行することはできる（プロジェクトを作り、`.firebaserc` を書き換え、
+データと Auth を移す）。移行のコストは、そのとき本番に溜まっているデータの量で決まる。
 
 ### 環境
 
-| 環境         | Firebase プロジェクト     | 用途                   |
+| 環境         | Firebase プロジェクト（A の場合） | 用途                   |
 | ------------ | ------------------------- | ---------------------- |
 | `develop`    | `your-project-develop`    | 開発中の動作確認       |
 | `staging`    | `your-project-staging`    | リリース前 QA          |
@@ -168,6 +216,51 @@ yarn deploy:production
 CI/CD: `.github/workflows/deploy.yml` が `release/*` / `hotfix/*`（→ staging）と `production` の push で自動デプロイ。
 develop は自動デプロイ対象外（複数人の feat/* push が互いに上書きし合うため）。各自 `yarn deploy:develop` で手動デプロイする。
 
+### デプロイ時の npm 解決は `.npmrc` で固定している
+
+`firebase deploy` は、リポジトリの `package.json` をそのまま使わない。**手元の
+`yarn install` が通ることと、デプロイ先で `npm` が解決できることは別**で、依存の
+更新が入っただけで後者だけが壊れる。実際、セキュリティ更新が 2 件入っただけで
+Cloud Functions と SSR 関数が別々の理由で解決に失敗し、デプロイが止まったことがある
+（CI は緑のまま。Hosting は配れるので気付きにくい）。
+
+そのため 2 か所に `.npmrc`（`legacy-peer-deps=true`）を置いている。**どちらも
+置き場所に意味がある。**
+
+| ファイル | どう届くか |
+|---|---|
+| `apps/functions/.npmrc` | `firebase.json` の `functions.source` がこのディレクトリで、中身がそのまま Cloud Functions のソースとして上がる。Cloud Build がそこで `npm install` する |
+| `apps/web/.npmrc` | framework-backed hosting のアダプタが `.firebase/<サイト>/functions/` へコピーする。コピー元は **`hosting.source`（`apps/web`）で、リポジトリのルートではない**（firebase-tools の `lib/frameworks/index.js` の `getProjectPath`）。コピー先はローカル / CI 側の `npm i` と Cloud Build 側の `npm ci` の両方が読む |
+
+`scripts/test-deploy-install.sh` が、この 2 つの形（`deploy.sh` が削ったあとの
+`apps/functions/package.json` と、アダプタが生成する SSR 関数の `package.json`）を
+再現して `npm` の解決を確かめる。`ci.yml` の Deploy Install Test が実行する。
+`npm install` は peer の衝突を黙って通すが Cloud Build が使う `npm ci` は拒否するので、
+両方を回している。
+
+> ⚠️ **`apps/` は `.templatesyncignore` の対象外なので、この 2 ファイルは Template Sync で
+> 届かない。** テンプレートより前に scaffold した派生プロジェクトは、自分で置く必要がある。
+
+### `deploy.sh` を書き換えるときに保つ約束［派生専用］
+
+> ⚠️ **`scripts/deploy.sh` は Template Sync の対象**（テンプレート同梱の `.templatesyncignore` に
+> 載っていない）。書き換えた版を残したいなら、**自分の `.templatesyncignore` に
+> `scripts/deploy.sh` を足すこと**（→「取り込み対象外にする」）。足さないと、同期 PR が
+> テンプレートの版を持ってくる。
+
+書き換えるときは、**同期される側がこのスクリプトの入口に依存している**ことに注意する。
+
+- **`SKIP_CHECKS=1` でデプロイ前チェック（type-check / lint / test / build）を省略できること**
+
+依存しているのは 2 つ。`.github/workflows/deploy.yml` は同じチェックをワークフローの step で
+済ませてから `SKIP_CHECKS=1` を渡す（残さないと CI で二重に走る）。`scripts/test-env-distribution.sh`
+の [6] は `node_modules` の無い一時ツリーで `deploy.sh` を回すので、省略できないと
+`yarn type-check` で止まり、**env の配り方とは無関係な理由でテストが赤くなる**（#341）。
+どちらも同期で配られるので、除外して自分の版を持つ場合も約束のほうは保つ。
+
+**逆に、書き換えないなら除外しないほうがよい。** デプロイ対象の絞り込み（→「デプロイ対象は
+`.firebaserc` の構成から決まる」）や env の退避のような、テンプレート側の修正が届かなくなる。
+
 ### Hosting のターゲットは環境名に合わせる
 
 既定は 1 環境 = 1 Firebase プロジェクトで、`firebase.json` の `hosting` も 1 つ。この構成では
@@ -197,6 +290,43 @@ DEPLOY_HOSTING_TARGETS='web admin' yarn deploy:staging
 
 判定は `scripts/lib/hosting-targets.mjs` にあり、`scripts/test-deploy-targets.sh` が回帰テストする。
 
+### デプロイ対象は `.firebaserc` の構成から決まる
+
+`--only` を付けずに `deploy.sh` を実行したときのデプロイ対象（既定のターゲット）は、
+層構成（`firestore` / `storage` / `functions` を持つか）と **`.firebaserc` の `projects`** から決まる。
+
+`projects` で複数の環境が**同じ Firebase プロジェクト ID** を指している場合（→「Firebase
+プロジェクトの持ち方は2通りある」の B）、`functions` / `firestore` / `storage` は環境で
+分けられない。そこで **同じプロジェクトを共有する環境のうち、最も本番側の 1つだけ**
+（`develop` < `staging` < `production` の順。全部が同じプロジェクトなら `production`）が
+既定でそれらを配り、**他の環境では既定から外す**。
+
+```
+$ bash scripts/deploy.sh develop      # B の構成（3環境が同じプロジェクト・サイトは分けてある）
+[warn] develop は staging / production と同じ Firebase プロジェクト（myapp）を指しています。
+[warn]   環境で分けられない functions / firestore / storage は既定のデプロイ対象から外しました。
+[warn]   この環境から配るなら明示してください: bash scripts/deploy.sh develop --only functions,firestore,storage
+```
+
+外した対象は **`--only` で明示すれば配れる**（止めはしない。ただし他の環境にも同じものが
+配られることを警告する）。CI（`.github/workflows/deploy.yml`）も同じ判定を通すため、
+B の構成では `release/*` への push で関数やルールが自動デプロイされることはない。
+
+**`hosting` だけは扱いが違う。** 判定の基準は「**`firebase.json` の `hosting` にその環境名の
+ターゲット（`target` / `site`）があるか**」で、`hosting-targets.mjs` が環境名で絞り込める形と
+同じ。無い場合（サイトが 1 つしかない、`web` / `admin` のような役割で分けている、一部の環境
+だけ宣言している）は配る先が他の環境と同じサイトになるため、**既定から外し、`--only` での
+回避も案内しない**（`--only hosting` を明示すれば配れてしまうので、そのときは警告を出す）。
+配る先を `DEPLOY_HOSTING_TARGETS` で明示しているときは、選んだのが人なので外さない。
+
+配る側でない環境で、既定の対象が全て外れた場合、`deploy.sh` は配るものが無いことを告げて
+終了する（配る側 = 通常 `production` はこの絞り込みを受けないので、そこからは配れる）。
+
+A の構成（環境ごとにプロジェクトを分ける）では何も変わらない — 共有している環境が無いため、
+既定のターゲットはそのまま使われる。
+
+判定は `scripts/lib/deploy-targets.mjs` にあり、`scripts/test-deploy-targets.sh` が回帰テストする。
+
 ### CI 用 GitHub Secrets の登録
 
 `deploy.yml` はデプロイ時に環境別の env をシークレットから `.env.<環境名>` に書き出す（`secrets[format('ENV_FILE_{0}', name)]`）。
@@ -214,7 +344,114 @@ develop 用のシークレットは不要（CI からデプロイしないため
 # 環境別 env の全文をそのまま登録（ローカルにファイルがある前提）
 gh secret set ENV_FILE_STAGING < .env.staging
 gh secret set ENV_FILE_PRODUCTION < .env.production
+```
 
+#### 先にサービスアカウントへ IAM ロールを付与する
+
+⚠️ **鍵を作る前にやること。** Firebase Console が自動生成する `firebase-adminsdk-*`
+サービスアカウントは、既定では Admin SDK の実行に必要な権限しか持たない。この鍵をそのまま
+`FIREBASE_SERVICE_ACCOUNT` に入れて `deploy.yml` を回すと **403 でデプロイが止まる。**
+
+厄介なのは**一度に全部はわからず、段階的に落ちる**こと。足りないロールを 1 つ直すと次が出る。
+
+```
+# 1回目 — firestore.rules のコンパイル検証で停止
+Error: Request to https://firebaserules.googleapis.com/v1/projects/<project>:test
+had HTTP Error: 403, The caller does not have permission
+
+# 2回目 — Rules・Hosting・Functions 本体は通り、スケジュール実行の関数だけ失敗
+lacks IAM permission "cloudscheduler.jobs.update"
+```
+
+どちらもワークフローが数分走ってから落ちるため、ロールを 1 つずつ足して再実行する往復になる。
+**CI からデプロイする Firebase プロジェクトごとに同じ作業を繰り返す**ので、
+初回デプロイの前に以下をまとめて付与しておく（1 プロジェクトに環境を相乗りさせる構成なら 1 回で済む）。
+
+```bash
+SA=firebase-adminsdk-xxxxx@<project-id>.iam.gserviceaccount.com
+
+for role in \
+  roles/firebase.admin \
+  roles/cloudfunctions.admin \
+  roles/run.admin \
+  roles/artifactregistry.admin \
+  roles/serviceusage.serviceUsageConsumer
+do
+  gcloud projects add-iam-policy-binding <project-id> \
+    --member="serviceAccount:$SA" --role="$role" --condition=None
+done
+```
+
+| ロール | 何のため |
+|---|---|
+| `roles/firebase.admin` | Rules API の `:test`（ルールのコンパイル検証）、Hosting・Firestore ルール / インデックスのデプロイ |
+| `roles/cloudfunctions.admin` | Functions のデプロイ |
+| `roles/run.admin` | 第2世代 Functions の実体が Cloud Run |
+| `roles/artifactregistry.admin` | Functions のコンテナイメージ push |
+| `roles/serviceusage.serviceUsageConsumer` | `ensuring required API ... is enabled` のチェック |
+
+**対象はプロジェクトごと。** CI からデプロイするのは staging と production の 2 つ
+（develop は CI からデプロイしないため不要）で、**`FIREBASE_SERVICE_ACCOUNT` は 1 つの鍵を
+両環境で共用する**。相乗り構成（B）では staging と production が同じプロジェクトなので、
+このループは 1 回だけ実行する。つまり既定では、**1 つの SA に対して staging / production の各プロジェクトで
+上のループを実行する**（`add-iam-policy-binding` のメンバーには別プロジェクトの SA も指定できる）。
+環境ごとに鍵を分ける構成にした場合（この節の後半の GitHub Environment）は、それぞれの SA に
+それぞれのプロジェクトで付与する。
+
+#### 残り 2 つのロールは対象を絞って付ける
+
+上のループに混ぜていない 2 つがある。**プロジェクト全体に付けると過剰になる**ため。
+
+**`roles/iam.serviceAccountUser`**（関数のランタイム SA を引き受ける）は、**プロジェクト全体に
+付けると CI の SA がプロジェクト内の任意の SA を `actAs` できてしまう** — より強い SA を実行主体に
+選べる状態になる。ランタイム SA 1 つに絞って付ける。
+
+```bash
+# デプロイ済みなら実物を引く
+RUNTIME_SA=$(gcloud functions describe api --gen2 --region=asia-northeast1 \
+  --project=<project-id> --format='value(serviceConfig.serviceAccountEmail)')
+
+gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
+  --project=<project-id> \
+  --member="serviceAccount:$SA" --role=roles/iam.serviceAccountUser
+```
+
+初回デプロイ前は引くべき関数がまだ無い。その場合は既定のランタイム SA
+（`<project-number>-compute@developer.gserviceaccount.com` か
+`<project-id>@appspot.gserviceaccount.com` のどちらか。プロジェクトによって変わるので
+**どちらかは確認してから**）に付け、外したら **403 のメッセージが `actAs` に失敗した SA を
+名指しする**ので、それに合わせて付け直す。
+
+**`roles/cloudscheduler.admin`** は `onSchedule` の関数を持つ構成でのみ必要
+（`cloudscheduler.jobs.update`）。テンプレート同梱の `apps/functions/src/index.ts` は
+スケジュール関数の export がコメントアウトされた状態なので、**既定構成では要らない**。
+`/new-function` で `onSchedule` を足したときに、そのプロジェクトへ追加する。
+
+```bash
+gcloud projects add-iam-policy-binding <project-id> \
+  --member="serviceAccount:$SA" --role=roles/cloudscheduler.admin --condition=None
+```
+
+足りないと、Rules・Hosting・Functions 本体まで通ってからその関数だけが落ちる。
+
+#### 付与するときの補足
+
+- **付与する側に `roles/resourcemanager.projectIamAdmin`（または Owner）が要る。** IAM の変更は
+  権限昇格にあたるため `scripts/setup.sh` では自動実行せず、手順として残している。
+- `roles/firebase.admin` は広いロールだが、Rules API の `:test` を含む最小の組み合わせを特定する
+  コストが高いため、**CI 専用の SA であること**を前提に admin ロールで妥協している。
+- 付与済みか確認する（プロジェクト単位の付与のみ。ランタイム SA に絞ったぶんは
+  `gcloud iam service-accounts get-iam-policy "$RUNTIME_SA"` で見る）:
+
+```bash
+gcloud projects get-iam-policy <project-id> \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:$SA" --format="value(bindings.role)"
+```
+
+#### 鍵を作って登録する
+
+```bash
 # サービスアカウント鍵を登録
 # （Firebase Console > プロジェクトの設定 > サービスアカウント > 新しい秘密鍵の生成）
 gh secret set FIREBASE_SERVICE_ACCOUNT < service-account.json
@@ -588,9 +825,16 @@ gh label create template-sync
 
 1. **App を作る** — Organization settings > Developer settings > GitHub Apps > New GitHub App
    （個人アカウント所有にするなら Settings > Developer settings > GitHub Apps）
-   - Repository permissions: **Contents: Read and write** / **Pull requests: Read and write**
+   - Repository permissions: **Contents: Read and write** / **Pull requests: Read and write** /
+     **Workflows: Read and write**
    - **Webhook の Active のチェックを外す**（このワークフローは webhook を使わない）
    - 親テンプレートは public なので、読み取り用の追加権限は要らない
+
+   `Workflows` が要るのは、同期の対象に `.github/workflows/` が入るため。無いと取り込み自体は
+   進んで、最後の push だけが
+   `refusing to allow a GitHub App to create or update workflow ... without 'workflows' permission`
+   で弾かれる。**権限を後から足した場合は、インストール側で変更を承認するまで反映されない**
+   （Organization settings > GitHub Apps に「Review request」が出る）。
 2. **Client ID を控え、Private key を生成する**（`.pem` がダウンロードされる）
 3. **インストールする** — 作った App をインストールし、対象を派生リポジトリに絞る
 4. **登録する** — Client ID は Variables、秘密鍵は Secrets（置き場所が違う）
@@ -636,8 +880,9 @@ gh label create template-sync
 App を作れないとき（Organization の owner 権限が無い、個人リポジトリで scaffold した等）の代替。
 
 Settings > Developer settings > Personal access tokens > **Fine-grained tokens** で作る。
-Repository access に対象リポジトリ、権限は **Contents: Read and write** と
-**Pull requests: Read and write**（Metadata は自動で付く）。
+Repository access に対象リポジトリ、権限は **Contents: Read and write**、
+**Pull requests: Read and write**、**Workflows: Read and write**（Metadata は自動で付く）。
+`Workflows` は App と同じ理由で要る（同期の対象に `.github/workflows/` が入る）。
 
 ```bash
 gh secret set TEMPLATE_SYNC_TOKEN
@@ -662,6 +907,42 @@ PR にワークフローを起こすために、外部のトークンが要る�
 なお、取り込み元（親テンプレート）の**読み取り**は `github.token` で行う。親は public で足りるうえ、
 App のインストールトークンは `owner` / `repositories` を指定しない限り自リポジトリにしか
 スコープされないため、別リポジトリを読む経路には使えない。
+
+### 取り込み対象外にする
+
+**派生プロジェクトで書き換えたファイルは、自分の `.templatesyncignore` に足す。**
+テンプレート同梱の `.templatesyncignore` には「プロジェクトごとに違うもの」（`apps/` `packages/`・
+Firebase 設定・`layers.json`・`.claude/hooks/config.sh` ほか）が入っているが、
+**そこに無いファイルは全て同期される。** 書き換えたまま足さないでいると、同期 PR が
+テンプレートの版を持ってくる（`scripts/deploy.sh` がこれに当たる）。
+
+```
+# .templatesyncignore の**末尾**（`# template-only:end` より後ろ）に足す
+scripts/deploy.sh
+```
+
+`# template-only:start` / `:end` の内側は**テンプレート本体だけが持つファイル**の一覧で、
+`scripts/check-docs.sh` と `scripts/test-docs-downstream.sh` がその意味で読む。派生が
+自分の版を持つファイルは外側（末尾）に置く。`.github/workflows/ci.yml` を参照方式にした派生では
+`scripts/adopt-references.mjs` が同じ場所へ自動で足すので、こちらは手作業が要らない
+（→「切り替え手順（派生プロジェクト側）」）。
+
+**効き始めるのは `production` に入ってから。** ワークフローの `actions/checkout` は ref 未指定＝
+デフォルトブランチを見るため、作業ブランチに足しただけでは次の同期に効かない（リリースに載せる）。
+すでに開いている同期 PR にも遡って効かないので、そちらは PR 上で戻す。
+
+一度入れば残る。`AndreasAugustin/actions-template-sync` は同期のたびに**除外ファイル自体を
+派生側の版へ戻してから**除外を適用する（`template-sync.yml` がピン留めしている v2.5.3 のソース
+`src/sync_template.sh` の `restore_templatesyncignore_file` で確認）。
+
+> ⚠️ **同じ理由で、テンプレート側が `.templatesyncignore` に足した行は派生に届かない。**
+> 除外の追加（`template-only` に入る本体専用スクリプト等）は同期で配られないため、
+> 古い派生には本体だけが持つファイルが流れ込み、`ci.yml` がそれを検出して実行してしまう。
+> テンプレートの `.templatesyncignore` と自分のものを、ときどき突き合わせること。
+
+**書き換えていないなら足さない。** テンプレート側の修正が届かなくなるうえ、
+`check-docs.sh` がそのパスへの言及を参照切れとして検査しなくなる
+（同期では埋めようがないパス、という扱いになるため → `.claude/docs/hooks.md`）。
 
 ## ブランチ名とコミットメッセージの補足
 
