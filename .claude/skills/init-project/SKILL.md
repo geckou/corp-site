@@ -38,6 +38,9 @@ yarn setup
 ```
 
 - `.firebaserc` のプレースホルダ（`your-project-develop` 等）を実際の Firebase プロジェクト ID に置換
+  （**環境ごとにプロジェクトを分けるか、1 つのプロジェクトに相乗りさせるかを対話で選ぶ。**
+  判断材料は `.claude/docs/git-workflow.md`「Firebase プロジェクトの持ち方は2通りある」。
+  規模に対して 3 プロジェクトが過剰なら相乗り構成を勧め、選んだ構成を `spec.md` に残す）
 - `.env.develop` / `.env.staging` / `.env.production` / `.env.local` を `.env.example` から作成
 - Node.js / yarn / Firebase CLI のチェック、依存インストール
 - ブランチ保護ルールの取り込み（`production` と、`release/*` / `hotfix/*`。どちらも取り込むか対話で聞かれる）
@@ -98,7 +101,8 @@ rm -f .github/workflows/publish.yml .github/workflows/layer-matrix.yml \
   .github/workflows/smoke-test.yml .github/workflows/release-tag.yml
 rm -f scripts/release.sh scripts/geckou-release scripts/install-release-command.sh \
   scripts/test-release-command.sh scripts/check-api-diff.mjs scripts/test-api-diff.sh \
-  scripts/check-workspace-ranges.mjs scripts/test-workspace-ranges.sh
+  scripts/check-workspace-ranges.mjs scripts/test-workspace-ranges.sh \
+  scripts/test-layers.sh
 ```
 
 `ci.yml` の該当ステップは `hashFiles` で存在を見ているため、消しても CI は緑のまま通る。
@@ -130,10 +134,8 @@ rm -f scripts/release.sh scripts/geckou-release scripts/install-release-command.
   scripts の `turbo dev --filter=@geckou/web...` 等
 - 全ソースコードの import 文（`@geckou/shared`, `@geckou/shared/stores` 等）
 - `apps/*/tailwind.config.{ts,js}` の `@geckou/shared/theme` 参照
-- `scripts/setup.sh` 内の `yarn workspace @geckou/shared build`
 - `apps/functions/tsconfig.json` の paths（`@geckou/shared` エイリアス）
-- `apps/web/next.config.ts` / `apps/mobile/metro.config.js` / `firebase.json` /
-  `lint-staged.config.cjs` 内の参照
+- `apps/web/next.config.ts` / `apps/mobile/metro.config.js` / `firebase.json` 内の参照
 - `.claude/skills/` / `.claude/docs/` / `README.md` 内のコード例
 
 一括置換（macOS の BSD sed。Linux では `sed -i ''` を `sed -i` にする）:

@@ -29,10 +29,12 @@ import {
   loadManifest,
   pruneManifest,
   readJson,
+  requireFlagValue,
   resolveAddition,
   resolveJsonPath,
   restoreKeyOrder,
   stripBlocks,
+  validateMarkers,
   writeJson,
 } from './lib/layers.mjs'
 
@@ -44,10 +46,10 @@ function parseArguments(argv) {
 
     if (argument === '--target') {
       index += 1
-      options.target = path.resolve(argv[index] ?? '')
+      options.target = requireFlagValue('--target', argv[index])
     } else if (argument === '--from') {
       index += 1
-      options.from = path.resolve(argv[index] ?? '')
+      options.from = requireFlagValue('--from', argv[index])
     } else if (argument === '--dry-run') {
       options.dryRun = true
     } else if (argument === '--help' || argument === '-h') {
@@ -106,9 +108,11 @@ function prepareSource(root, options) {
   } catch (error) {
     fs.rmSync(dir, { recursive: true, force: true })
 
-    throw new Error(
-      `テンプレートの取得に失敗しました: ${error.stderr?.toString().trim() ?? error.message}`
-    )
+    const detail =
+      error.stderr?.toString().trim() ||
+      (error instanceof Error ? error.message : String(error))
+
+    throw new Error(`テンプレートの取得に失敗しました: ${detail}`)
   }
 
   return {
@@ -272,6 +276,7 @@ function copyRecursive(from, to, rename) {
  * の 3-way マージ。ローカルに手が入っていなければ theirs がそのまま採用される。
  */
 function mergeWithLayer(localContent, sourceContent, addition, additionLayers) {
+  // 手本側のマーカーの構文は、書き込みを始める前に validateMarkers が通している
   let base = stripBlocks(sourceContent, addition)
 
   // 減算が置換で消していた箇所（replace）も base 側に反映しておく
@@ -421,6 +426,13 @@ function main() {
 
     stage = stageSource(source.dir, sourceManifest, remaining)
 
+    // 手本側のマーカーを、ローカルへ書き込む前にまとめて検証する。
+    // 3-way マージの base は stripBlocks で作るので、壊れたマーカーがあると
+    // base が途中で切れる。ファイルごとに気付くと、途中まで書き込んだ状態で
+    // 止まることになる（#355）。ここは一時ディレクトリなので、落ちても
+    // 対象のリポジトリは触っていない
+    validateMarkers(stage.dir)
+
     const rename = detectScopeRename(stage.dir, root)
 
     if (rename) {
@@ -569,15 +581,26 @@ function main() {
     // 層の交点（billing の RevenueCat 等）で削られていた項目をテンプレートから補う。
     // 最後に実態へ合わせて刈り込む
     if (!options.dryRun) {
-      const merged = sourceManifest.layers
-        .filter(
-          (layer) => present.has(layer.name) || addition.includes(layer.name)
-        )
-        .map((layer) => {
-          const local = layerByName(localManifest, layer.name)
+      const sourceNames = new Set(
+        sourceManifest.layers.map((layer) => layer.name)
+      )
 
-          return local ? mergeLayerDefinition(local, layer) : layer
-        })
+      const merged = [
+        ...sourceManifest.layers
+          .filter(
+            (layer) => present.has(layer.name) || addition.includes(layer.name)
+          )
+          .map((layer) => {
+            const local = layerByName(localManifest, layer.name)
+
+            return local ? mergeLayerDefinition(local, layer) : layer
+          }),
+        // 手本に無い層（派生プロジェクトが自分で足した層）はここで拾わないと消える。
+        // 消えると、その層のマーカーが「未定義の層のマーカー」になり、
+        // remove-layer でも外せなくなる（#356）。sync-layers.mjs は同じ状況を
+        // 既に救っているので、加算側だけが漏れていた
+        ...localManifest.layers.filter((layer) => !sourceNames.has(layer.name)),
+      ]
 
       writeJson(
         path.join(root, 'layers.json'),
@@ -621,6 +644,8 @@ function main() {
 try {
   main()
 } catch (error) {
-  console.error(`[error] ${error.message}`)
+  console.error(
+    `[error] ${error instanceof Error ? error.message : String(error)}`
+  )
   process.exit(1)
 }
