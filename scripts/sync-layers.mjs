@@ -23,6 +23,7 @@ import {
   applyRemoval,
   loadManifest,
   pruneManifest,
+  requireFlagValue,
   resolveRemoval,
   writeJson,
 } from './lib/layers.mjs'
@@ -30,25 +31,15 @@ import {
 function parseArguments(argv) {
   const options = { target: process.cwd(), template: '', dryRun: false }
 
-  // 値を省略すると path.resolve('') がカレントディレクトリになり、
-  // --template ではディレクトリを readFileSync して分かりにくい失敗になる
-  const requireValue = (flag, value) => {
-    if (value === undefined || value.startsWith('-')) {
-      throw new Error(`${flag} には値が必要です`)
-    }
-
-    return path.resolve(value)
-  }
-
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
 
     if (argument === '--target') {
       index += 1
-      options.target = requireValue('--target', argv[index])
+      options.target = requireFlagValue('--target', argv[index])
     } else if (argument === '--template') {
       index += 1
-      options.template = requireValue('--template', argv[index])
+      options.template = requireFlagValue('--template', argv[index])
     } else if (argument === '--dry-run') {
       options.dryRun = true
     } else if (argument === '--help' || argument === '-h') {
@@ -133,9 +124,14 @@ function main() {
   changes.push(`manifest layers.json: ${removal.join(', ')} を削除`)
 
   if (!options.dryRun) {
+    // layers 以外（source.repository / source.ref / markers / $comment）は
+    // 派生プロジェクト側を正にする。テンプレートのものを被せると、派生が自分の
+    // scaffold 元を指すよう書き換えた source が毎回巻き戻り、以後 add-layer が
+    // 誤ったリポジトリを clone する（#356）。remove-layer / add-layer も
+    // ローカルのマニフェストを土台にしていて、ここだけ挙動が違っていた
     writeJson(
       path.join(root, 'layers.json'),
-      pruneManifest(root, { ...template, layers })
+      pruneManifest(root, { ...local, layers })
     )
   }
 
@@ -152,6 +148,8 @@ function main() {
 try {
   main()
 } catch (error) {
-  console.error(`[error] ${error.message}`)
+  console.error(
+    `[error] ${error instanceof Error ? error.message : String(error)}`
+  )
   process.exit(1)
 }
