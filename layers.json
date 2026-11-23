@@ -31,7 +31,16 @@
         "scripts/deploy.sh",
         "scripts/use-env.sh",
         "turbo.json",
-        "renovate.json5"
+        "renovate.json5",
+        "apps/web/.npmrc",
+        "scripts/lib/hosting-targets.mjs",
+        "scripts/lib/deploy-targets.mjs",
+        "scripts/lib/workspace-names.mjs",
+        "scripts/test-deploy-targets.sh",
+        "scripts/test-deploy-install.sh",
+        "scripts/emit-esm-package-json.sh",
+        "renovate/default.json",
+        "renovate/automerge.json"
       ],
       "env": [
         "BASIC_AUTH_CREDENTIALS",
@@ -66,23 +75,54 @@
         "firestore.rules",
         "firestore.indexes.json"
       ],
-      "blocks": [".env.example"],
+      "blocks": [
+        ".env.example"
+      ],
       "deps": {
-        "package.json": ["firebase", "@firebase/rules-unit-testing"],
-        "apps/web/package.json": ["firebase", "firebase-admin"],
-        "packages/shared/package.json": ["firebase", "zustand"]
+        "package.json": [
+          "firebase",
+          "@firebase/rules-unit-testing"
+        ],
+        "apps/web/package.json": [
+          "firebase",
+          "firebase-admin"
+        ],
+        "packages/shared/package.json": [
+          "firebase",
+          "zustand"
+        ]
       },
       "json": {
         "firebase.json": [
-          ["firestore"],
-          ["emulators", "firestore"],
-          ["emulators", "auth"]
+          [
+            "firestore"
+          ],
+          [
+            "emulators",
+            "firestore"
+          ],
+          [
+            "emulators",
+            "auth"
+          ]
         ],
         "packages/shared/package.json": [
-          ["exports", "./firebase"],
-          ["exports", "./firestore"],
-          ["exports", "./storage"],
-          ["exports", "./stores"]
+          [
+            "exports",
+            "./firebase"
+          ],
+          [
+            "exports",
+            "./firestore"
+          ],
+          [
+            "exports",
+            "./storage"
+          ],
+          [
+            "exports",
+            "./stores"
+          ]
         ]
       },
       "replace": [
@@ -114,7 +154,10 @@
       "requires": "firebase",
       "removable": true,
       "summary": "API・Firestore / Auth トリガー・スケジュール実行の置き場所。問い合わせフォームのタイポ判定 API がここにある。外すとプロジェクトは API を持たない。",
-      "files": ["apps/functions", "apps/web/src/lib/api-client.ts"],
+      "files": [
+        "apps/functions",
+        "apps/web/src/lib/api-client.ts"
+      ],
       "blocks": [
         ".env.example",
         "scripts/use-env.sh",
@@ -128,7 +171,15 @@
         ]
       },
       "json": {
-        "firebase.json": [["functions"], ["emulators", "functions"]]
+        "firebase.json": [
+          [
+            "functions"
+          ],
+          [
+            "emulators",
+            "functions"
+          ]
+        ]
       },
       "env": [
         "ALLOWED_ORIGINS",
@@ -148,18 +199,30 @@
       "requires": "functions",
       "removable": true,
       "summary": "apps/mobile 一式と、それが持ち込む nohoist・Renovate preset の Expo ルール。現在このサイトでは使っておらず、scaffold のまま残している。",
-      "files": ["apps/mobile"],
+      "files": [
+        "apps/mobile",
+        "renovate/mobile.json",
+        ".github/workflows/mobile-release.yml"
+      ],
       "blocks": [
         ".env.example",
         "scripts/use-env.sh",
         "lint-staged.config.cjs",
-        "renovate.json5"
+        "renovate.json5",
+        ".claude/docs/git-workflow.md"
       ],
       "scripts": {
-        "package.json": ["dev:mobile"]
+        "package.json": [
+          "dev:mobile"
+        ]
       },
       "json": {
-        "package.json": [["workspaces", "nohoist"]]
+        "package.json": [
+          [
+            "workspaces",
+            "nohoist"
+          ]
+        ]
       },
       "env": [
         "FIREBASE_API_KEY",
@@ -186,7 +249,8 @@
         "apps/web/src/lib/revenuecat.ts",
         "apps/mobile/src/lib/revenuecat.ts",
         "apps/functions/src/revenuecat-webhook.ts",
-        "apps/functions/tests/revenuecat-webhook.test.ts"
+        "apps/functions/tests/revenuecat-webhook.test.ts",
+        ".claude/docs/billing.md"
       ],
       "blocks": [
         ".env.example",
@@ -194,7 +258,9 @@
         "scripts/use-env.sh"
       ],
       "deps": {
-        "apps/web/package.json": ["@revenuecat/purchases-js"],
+        "apps/web/package.json": [
+          "@revenuecat/purchases-js"
+        ],
         "apps/mobile/package.json": [
           "react-native-purchases",
           "react-native-purchases-ui"
