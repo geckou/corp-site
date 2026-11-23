@@ -5,14 +5,12 @@
 ```bash
 # 1. 機能開発
 git fetch origin --prune            # 進行中の release/* を見落とさないため必須
-git checkout production && git pull
-git checkout -b feat/user-profile
+git checkout production && git pull && git checkout -b feat/user-profile
 git merge origin/release/1.0.0      # 進行中の release があり、それに載せる場合
 # ... 開発・push → develop で動作確認 ...
 
 # 2. リリース準備（出したい機能だけ選ぶ）
-git checkout production
-git checkout -b release/1.0.0
+git checkout production && git checkout -b release/1.0.0
 git merge feat/user-profile
 git merge feat/posts
 git push origin release/1.0.0  # → staging で QA（push = staging へ自動デプロイ）
@@ -36,6 +34,10 @@ git checkout -b hotfix/1.0.1 production
 # ... 修正 → staging で確認 → production に merge ...
 ```
 
+> 切り替えと分岐を 1 回のコマンドで実行するときは **`&&` で繋ぐ**。改行や `;` で並べると、
+> `git checkout production` が失敗しても次の `git checkout -b` が走り、現在のブランチから
+> 切られる。`pre-git-guard.sh` は `&&` で繋がった切り替えだけを分岐元として認める。
+
 ## 作業ブランチの切り方
 
 **`production` から切り、進行中の `release/*` があればそれをマージしてから作業する。**
@@ -43,10 +45,12 @@ git checkout -b hotfix/1.0.1 production
 ```bash
 git fetch origin --prune            # まず必ず実行する
 git branch -r --list 'origin/release/*'   # 進行中のリリースを確認
-git checkout production && git pull
-git checkout -b feat/user-profile
+git checkout production && git pull && git checkout -b feat/user-profile
 git merge origin/release/1.0.0      # そのリリースに載せる場合のみ
 ```
+
+一覧には、アプリ単独のリリース `release/<アプリ>/<バージョン>` も出る。こちらは作業ブランチへ
+**取り込まない**（→「アプリ単独のリリース」）。
 
 ### なぜ production から切るのか
 
@@ -104,12 +108,60 @@ git merge origin/release/1.0.0      # そのリリースに載せる場合のみ
 
 ## マルチ環境（develop / staging / production）
 
-Firebase プロジェクトを3つ作成し、環境ごとに使い分ける。
-**環境とブランチは 1対1 ではない。**ブランチの種類に応じてデプロイ先が決まる。
+環境は `develop` / `staging` / `production` の3つ。**環境とブランチは 1対1 ではない。**
+ブランチの種類に応じてデプロイ先が決まる。
+
+### Firebase プロジェクトの持ち方は2通りある
+
+環境をどう Firebase プロジェクトへ割り当てるかは、**プロジェクトの規模で選ぶ**。
+どちらも `.firebaserc` の `projects` で表す（`yarn setup` が対話で聞く）。
+
+| | **A: 環境ごとにプロジェクトを分ける** | **B: 1 プロジェクトに相乗りさせる** |
+| --- | --- | --- |
+| Firebase プロジェクト | 3つ | 1つ |
+| Hosting | プロジェクトごとに 1 サイト | **環境ごとにサイトを分ける必要がある**（手動設定。分けないと環境を配り分けられない）|
+| 本番データ・本番ユーザー | 触れない | develop / staging から**触れる** |
+| Auth のユーザープール | 環境ごとに分断（本番と同じアカウントで開発時の確認ができない）| 共通 |
+| Functions / Firestore ルール | 環境ごとに検証できる | **環境で分けられない**（全環境で同じもの）|
+| モバイルの `GoogleService-Info.plist` / `google-services.json` | 環境ごとに必要（Expo の設定と配信構成も分岐する）| 1セット |
+| サービスアカウント発行と IAM 付与（→「先にサービスアカウントへ IAM ロールを付与する」）| プロジェクトごとに繰り返す | 1回 |
+| Blaze の課金先・予算アラート・GCP API 有効化 | 3つ | 1つ |
+| Firestore のデータ投入・インデックス作成 | 環境ごと | 1回 |
+
+**A が既定**（`.firebaserc` のプレースホルダも A）。本番データを壊しうる操作を仕組みで
+遮断できるため、本番に実ユーザーのデータが乗るなら A を選ぶ。**B は、その遮断を
+「Functions / Firestore を環境で検証できない」というトレードオフと引き換えに手放す代わりに、
+上表の右列ぶんの初期構築・維持コストを 1/3 にする。** LP・社内ツール・PoC のように
+関数とルールがほとんど動かないものでは、A のコストが機能開発より重くなることがある。
+
+```jsonc
+// A: 環境ごとにプロジェクトを分ける（既定）
+"projects": { "default": "myapp-develop", "develop": "myapp-develop", "staging": "myapp-staging", "production": "myapp-production" }
+
+// B: 1 プロジェクトに相乗りさせる（Hosting サイトで分ける。→「Hosting のターゲットは環境名に合わせる」）
+"projects": { "default": "myapp", "develop": "myapp", "staging": "myapp", "production": "myapp" }
+```
+
+> ⚠️ **B では `functions` / `firestore` / `storage` が環境で分かれない。** `deploy.sh` は
+> `.firebaserc` を読んでこれを検出し、**同じプロジェクトを共有する環境のうち最も本番側の
+> 1つ（通常は `production`）以外では、この3つを既定のデプロイ対象から外す**
+> （→「デプロイ対象は `.firebaserc` の構成から決まる」）。`yarn deploy:develop` が
+> 本番の関数とルールを上書きしないのは、この絞り込みのおかげ。**外した対象は
+> `--only` で明示すれば配れる**ので、遮断ではなく「既定を安全側に倒す」だけ。
+
+> ⚠️ **B では Hosting サイトを分けるまで、配る側以外の環境は hosting も配れない。** サイトが
+> 1 つのままだと `develop` も `production` も同じサイトを指すため、`yarn deploy:develop` が
+> 本番サイトを develop のビルドで上書きする。`deploy.sh` は **`firebase.json` の `hosting` に
+> その環境名のターゲット（`target` / `site`）があるか**を見て、無ければ `hosting` も既定から
+> 外し、配る前に止まる（配る側 = `production` は止まらない）。サイトの分け方は
+> 「Hosting のターゲットは環境名に合わせる」。
+
+後から A へ移行することはできる（プロジェクトを作り、`.firebaserc` を書き換え、
+データと Auth を移す）。移行のコストは、そのとき本番に溜まっているデータの量で決まる。
 
 ### 環境
 
-| 環境         | Firebase プロジェクト     | 用途                   |
+| 環境         | Firebase プロジェクト（A の場合） | 用途                   |
 | ------------ | ------------------------- | ---------------------- |
 | `develop`    | `your-project-develop`    | 開発中の動作確認       |
 | `staging`    | `your-project-staging`    | リリース前 QA          |
@@ -121,6 +173,7 @@ Firebase プロジェクトを3つ作成し、環境ごとに使い分ける。
 | ------------- | ------------ | -------------- | ------------------------ |
 | `feat/*`      | develop（手動）| `production`   | 機能開発                 |
 | `release/*`   | staging      | `production`   | リリース候補の QA        |
+| `release/<アプリ>/<バージョン>` | なし（既定） | `production` | アプリ単独のリリース（→ 下記） |
 | `hotfix/*`    | staging      | `production`   | 緊急修正                 |
 | `production`  | production   | -              | 本番（デフォルトブランチ）|
 
@@ -128,10 +181,32 @@ Firebase プロジェクトを3つ作成し、環境ごとに使い分ける。
 切った直後に、進行中の `release/*` があればマージして作業を始める（→「作業ブランチの切り方」）。
 例外は QA で見つかった不具合の修正で、対象の `release/*` から `fix/*` を切る（→「リリースフロー」2.5）。
 
-> ⚠️ **`release/*` / `hotfix/*` への push は staging への自動デプロイを発火する**（`.github/workflows/deploy.yml`）。
+> ⚠️ **`release/*` / `hotfix/*` への push は staging への自動デプロイを発火する**（`.github/workflows/deploy.yml`。
+> アプリ単独のリリース `release/<アプリ>/<バージョン>` は既定では配らない → 下記）。
 > そのため `release/*` への直接コミット・push は禁止。release に直接コミットすると、develop での動作確認を経ずに staging へ直行してしまう。
 > QA で見つかった修正も `fix/*` / `feat/*` を切って develop で確認し、`release/*` へ PR でマージする。
 > `release/*` へ push してよいのは、ブランチ作成時（`production` から切って `feat/*` をマージした結果）と PR マージのみ。
+
+### アプリ単独のリリース（`release/<アプリ>/<バージョン>`）
+
+リリース番号はリポジトリ全体で 1 つなので、通常はどのアプリも `release/<バージョン>` に載せて本番へ出す。
+他のアプリと依存の無いアプリ（静的なサイトなど）を全体のリリースと切り離して出したいときは、
+**`release/<アプリ>/<バージョン>`**（例: `release/site/0.1.0`）を切る。`<アプリ>` は `apps/<アプリ>` の
+ディレクトリ名（ケバブケース）、`<バージョン>` は `release/<バージョン>` と同じ表記。
+
+- **`apps/<アプリ>/` の外のファイルを含めない。** 共有パッケージ・依存（`yarn.lock`）・ルール・
+  Functions・`firebase.json`（hosting ターゲットの追加など）に触る変更は全体のリリースに載せる。
+  アプリの追加そのものも全体のリリースで行う。`branch-guard.yml` が `production` への PR で検査する
+- **同梱の `deploy.yml` は、このブランチへの push では何も配らない。** production を土台に全ターゲットを
+  staging へ配ると、同時に QA 中の全体のリリースを古い版で上書きし、そちらの次のデプロイでも戻らない
+  （差分の基準がブランチごとのため）。staging でアプリだけを確かめたいなら、派生側のデプロイ設定で
+  そのアプリのターゲットだけを配るようにする。`production` へのマージ後のデプロイは通常どおり
+- 作業ブランチへは**取り込まない**（そのアプリの外の変更を含めない約束が崩れるため）。
+  `session-start-git-context.sh` / `post-git-branch-reminder.sh` は全体のリリースとは別に一覧し、
+  マージを勧めるのは全体のリリースだけ。`pre-git-guard.sh` は取り込み（merge / rebase / pull /
+  cherry-pick）に確認を求める
+- 名前の形以外の扱い（直接コミット禁止・PR 必須・`production` への PR を許可）は `release/*` と同じ。
+  `deploy.yml` の `release/**`、ruleset の `refs/heads/release/**`、`branch-guard.yml` の `release/*` にもそのまま一致する
 
 ### 開発〜リリースの流れ
 
@@ -168,6 +243,72 @@ yarn deploy:production
 CI/CD: `.github/workflows/deploy.yml` が `release/*` / `hotfix/*`（→ staging）と `production` の push で自動デプロイ。
 develop は自動デプロイ対象外（複数人の feat/* push が互いに上書きし合うため）。各自 `yarn deploy:develop` で手動デプロイする。
 
+### デプロイ時の npm 解決は `.npmrc` で固定している
+
+`firebase deploy` は、リポジトリの `package.json` をそのまま使わない。**手元の
+`yarn install` が通ることと、デプロイ先で `npm` が解決できることは別**で、依存の
+更新が入っただけで後者だけが壊れる。実際、セキュリティ更新が 2 件入っただけで
+Cloud Functions と SSR 関数が別々の理由で解決に失敗し、デプロイが止まったことがある
+（CI は緑のまま。Hosting は配れるので気付きにくい）。
+
+そのため 2 か所に `.npmrc`（`legacy-peer-deps=true`）を置いている。**どちらも
+置き場所に意味がある。**
+
+| ファイル | どう届くか |
+|---|---|
+| `apps/functions/.npmrc` | `firebase.json` の `functions.source` がこのディレクトリで、中身がそのまま Cloud Functions のソースとして上がる。Cloud Build がそこで `npm install` する |
+| `apps/web/.npmrc` | framework-backed hosting のアダプタが `.firebase/<サイト>/functions/` へコピーする。コピー元は **`hosting.source`（`apps/web`）で、リポジトリのルートではない**（firebase-tools の `lib/frameworks/index.js` の `getProjectPath`）。コピー先はローカル / CI 側の `npm i` と Cloud Build 側の `npm ci` の両方が読む |
+
+`scripts/test-deploy-install.sh` が、この 2 つの形（`deploy.sh` が削ったあとの
+`apps/functions/package.json` と、アダプタが生成する SSR 関数の `package.json`）を
+再現して `npm` の解決を確かめる。`ci.yml` の Deploy Install Test が実行する。
+`npm install` は peer の衝突を黙って通すが Cloud Build が使う `npm ci` は拒否するので、
+両方を回している。
+
+> ⚠️ **`apps/` は `.templatesyncignore` の対象外なので、この 2 ファイルは Template Sync で
+> 届かない。** テンプレートより前に scaffold した派生プロジェクトは、自分で置く必要がある。
+
+### `deploy.sh` を書き換えるときに保つ約束［派生専用］
+
+> ⚠️ **`scripts/deploy.sh` は Template Sync の対象**（テンプレート同梱の `.templatesyncignore` に
+> 載っていない）。書き換えた版を残したいなら、**自分の `.templatesyncignore` に
+> `scripts/deploy.sh` を足すこと**（→「取り込み対象外にする」）。足さないと、同期 PR が
+> テンプレートの版を持ってくる。
+
+書き換えるときは、**同期される側がこのスクリプトの入口に依存している**ことに注意する。
+
+- **`SKIP_CHECKS=1` でデプロイ前チェック（type-check / lint / test / build）を省略できること**
+
+依存しているのは 2 つ。`.github/workflows/deploy.yml` は同じチェックをワークフローの step で
+済ませてから `SKIP_CHECKS=1` を渡す（残さないと CI で二重に走る）。`scripts/test-env-distribution.sh`
+の [6] は `node_modules` の無い一時ツリーで `deploy.sh` を回すので、省略できないと
+`yarn type-check` で止まり、**env の配り方とは無関係な理由でテストが赤くなる**（#341）。
+どちらも同期で配られるので、除外して自分の版を持つ場合も約束のほうは保つ。
+
+**逆に、書き換えないなら除外しないほうがよい。** デプロイ対象の絞り込み（→「デプロイ対象は
+`.firebaserc` の構成から決まる」）や env の退避のような、テンプレート側の修正が届かなくなる。
+
+#### 関数の削除に確認が入る
+
+`firebase deploy` の `--force` は「**ソースに無い関数を確認なしで削除する**」を含む。
+hosting やルールでは確認を飛ばすだけだが、functions では取り消せない削除になるため、
+`deploy.sh` は対象に functions が含まれるとき**対話端末からの実行では `--force` を付けない**。
+非対話（CI）はプロンプトに答えられずデプロイが止まるので、付けたままにする。
+
+`FUNCTIONS_FORCE` で上書きできる。
+
+| 値 | 挙動 |
+|---|---|
+| `auto`（既定） | 非対話なら付ける / 対話端末では付けず、削除を人に聞く |
+| `always` | 常に付ける（手元から確認を飛ばしたいとき） |
+| `never` | 常に付けない |
+
+#### `--only` に空の値を渡すと止まる
+
+`--only ""` は**エラーで終了する**。値の有無だけで分岐すると「指定が無かった」ことになり、
+既定のターゲット全部（functions / firestore / storage / hosting）が配られる。
+対象を絞ったつもりの指定が最大の配布に反転するため、ここは素通りさせない（#357）。
+
 ### Hosting のターゲットは環境名に合わせる
 
 既定は 1 環境 = 1 Firebase プロジェクトで、`firebase.json` の `hosting` も 1 つ。この構成では
@@ -195,7 +336,52 @@ staging の `.env` でビルドしたものを production のサイトにも出�
 DEPLOY_HOSTING_TARGETS='web admin' yarn deploy:staging
 ```
 
+環境名と一致するターゲットがあるとき、**名前に環境名を含む別のターゲット**（別アプリのサイトを
+相乗りさせた `lp-production` など）には配らない。配らなかったことは警告に出るので、あわせて配るなら
+同じく `DEPLOY_HOSTING_TARGETS` で明示する（`package.json` の `deploy:*` に書いておくと漏れない）。
+
+```bash
+DEPLOY_HOSTING_TARGETS='production lp-production' yarn deploy:production
+```
+
 判定は `scripts/lib/hosting-targets.mjs` にあり、`scripts/test-deploy-targets.sh` が回帰テストする。
+
+### デプロイ対象は `.firebaserc` の構成から決まる
+
+`--only` を付けずに `deploy.sh` を実行したときのデプロイ対象（既定のターゲット）は、
+層構成（`firestore` / `storage` / `functions` を持つか）と **`.firebaserc` の `projects`** から決まる。
+
+`projects` で複数の環境が**同じ Firebase プロジェクト ID** を指している場合（→「Firebase
+プロジェクトの持ち方は2通りある」の B）、`functions` / `firestore` / `storage` は環境で
+分けられない。そこで **同じプロジェクトを共有する環境のうち、最も本番側の 1つだけ**
+（`develop` < `staging` < `production` の順。全部が同じプロジェクトなら `production`）が
+既定でそれらを配り、**他の環境では既定から外す**。
+
+```
+$ bash scripts/deploy.sh develop      # B の構成（3環境が同じプロジェクト・サイトは分けてある）
+[warn] develop は staging / production と同じ Firebase プロジェクト（myapp）を指しています。
+[warn]   環境で分けられない functions / firestore / storage は既定のデプロイ対象から外しました。
+[warn]   この環境から配るなら明示してください: bash scripts/deploy.sh develop --only functions,firestore,storage
+```
+
+外した対象は **`--only` で明示すれば配れる**（止めはしない。ただし他の環境にも同じものが
+配られることを警告する）。CI（`.github/workflows/deploy.yml`）も同じ判定を通すため、
+B の構成では `release/*` への push で関数やルールが自動デプロイされることはない。
+
+**`hosting` だけは扱いが違う。** 判定の基準は「**`firebase.json` の `hosting` にその環境名の
+ターゲット（`target` / `site`）があるか**」で、`hosting-targets.mjs` が環境名で絞り込める形と
+同じ。無い場合（サイトが 1 つしかない、`web` / `admin` のような役割で分けている、一部の環境
+だけ宣言している）は配る先が他の環境と同じサイトになるため、**既定から外し、`--only` での
+回避も案内しない**（`--only hosting` を明示すれば配れてしまうので、そのときは警告を出す）。
+配る先を `DEPLOY_HOSTING_TARGETS` で明示しているときは、選んだのが人なので外さない。
+
+配る側でない環境で、既定の対象が全て外れた場合、`deploy.sh` は配るものが無いことを告げて
+終了する（配る側 = 通常 `production` はこの絞り込みを受けないので、そこからは配れる）。
+
+A の構成（環境ごとにプロジェクトを分ける）では何も変わらない — 共有している環境が無いため、
+既定のターゲットはそのまま使われる。
+
+判定は `scripts/lib/deploy-targets.mjs` にあり、`scripts/test-deploy-targets.sh` が回帰テストする。
 
 ### CI 用 GitHub Secrets の登録
 
@@ -214,7 +400,114 @@ develop 用のシークレットは不要（CI からデプロイしないため
 # 環境別 env の全文をそのまま登録（ローカルにファイルがある前提）
 gh secret set ENV_FILE_STAGING < .env.staging
 gh secret set ENV_FILE_PRODUCTION < .env.production
+```
 
+#### 先にサービスアカウントへ IAM ロールを付与する
+
+⚠️ **鍵を作る前にやること。** Firebase Console が自動生成する `firebase-adminsdk-*`
+サービスアカウントは、既定では Admin SDK の実行に必要な権限しか持たない。この鍵をそのまま
+`FIREBASE_SERVICE_ACCOUNT` に入れて `deploy.yml` を回すと **403 でデプロイが止まる。**
+
+厄介なのは**一度に全部はわからず、段階的に落ちる**こと。足りないロールを 1 つ直すと次が出る。
+
+```
+# 1回目 — firestore.rules のコンパイル検証で停止
+Error: Request to https://firebaserules.googleapis.com/v1/projects/<project>:test
+had HTTP Error: 403, The caller does not have permission
+
+# 2回目 — Rules・Hosting・Functions 本体は通り、スケジュール実行の関数だけ失敗
+lacks IAM permission "cloudscheduler.jobs.update"
+```
+
+どちらもワークフローが数分走ってから落ちるため、ロールを 1 つずつ足して再実行する往復になる。
+**CI からデプロイする Firebase プロジェクトごとに同じ作業を繰り返す**ので、
+初回デプロイの前に以下をまとめて付与しておく（1 プロジェクトに環境を相乗りさせる構成なら 1 回で済む）。
+
+```bash
+SA=firebase-adminsdk-xxxxx@<project-id>.iam.gserviceaccount.com
+
+for role in \
+  roles/firebase.admin \
+  roles/cloudfunctions.admin \
+  roles/run.admin \
+  roles/artifactregistry.admin \
+  roles/serviceusage.serviceUsageConsumer
+do
+  gcloud projects add-iam-policy-binding <project-id> \
+    --member="serviceAccount:$SA" --role="$role" --condition=None
+done
+```
+
+| ロール | 何のため |
+|---|---|
+| `roles/firebase.admin` | Rules API の `:test`（ルールのコンパイル検証）、Hosting・Firestore ルール / インデックスのデプロイ |
+| `roles/cloudfunctions.admin` | Functions のデプロイ |
+| `roles/run.admin` | 第2世代 Functions の実体が Cloud Run |
+| `roles/artifactregistry.admin` | Functions のコンテナイメージ push |
+| `roles/serviceusage.serviceUsageConsumer` | `ensuring required API ... is enabled` のチェック |
+
+**対象はプロジェクトごと。** CI からデプロイするのは staging と production の 2 つ
+（develop は CI からデプロイしないため不要）で、**`FIREBASE_SERVICE_ACCOUNT` は 1 つの鍵を
+両環境で共用する**。相乗り構成（B）では staging と production が同じプロジェクトなので、
+このループは 1 回だけ実行する。つまり既定では、**1 つの SA に対して staging / production の各プロジェクトで
+上のループを実行する**（`add-iam-policy-binding` のメンバーには別プロジェクトの SA も指定できる）。
+環境ごとに鍵を分ける構成にした場合（この節の後半の GitHub Environment）は、それぞれの SA に
+それぞれのプロジェクトで付与する。
+
+#### 残り 2 つのロールは対象を絞って付ける
+
+上のループに混ぜていない 2 つがある。**プロジェクト全体に付けると過剰になる**ため。
+
+**`roles/iam.serviceAccountUser`**（関数のランタイム SA を引き受ける）は、**プロジェクト全体に
+付けると CI の SA がプロジェクト内の任意の SA を `actAs` できてしまう** — より強い SA を実行主体に
+選べる状態になる。ランタイム SA 1 つに絞って付ける。
+
+```bash
+# デプロイ済みなら実物を引く
+RUNTIME_SA=$(gcloud functions describe api --gen2 --region=asia-northeast1 \
+  --project=<project-id> --format='value(serviceConfig.serviceAccountEmail)')
+
+gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
+  --project=<project-id> \
+  --member="serviceAccount:$SA" --role=roles/iam.serviceAccountUser
+```
+
+初回デプロイ前は引くべき関数がまだ無い。その場合は既定のランタイム SA
+（`<project-number>-compute@developer.gserviceaccount.com` か
+`<project-id>@appspot.gserviceaccount.com` のどちらか。プロジェクトによって変わるので
+**どちらかは確認してから**）に付け、外したら **403 のメッセージが `actAs` に失敗した SA を
+名指しする**ので、それに合わせて付け直す。
+
+**`roles/cloudscheduler.admin`** は `onSchedule` の関数を持つ構成でのみ必要
+（`cloudscheduler.jobs.update`）。テンプレート同梱の `apps/functions/src/index.ts` は
+スケジュール関数の export がコメントアウトされた状態なので、**既定構成では要らない**。
+`/new-function` で `onSchedule` を足したときに、そのプロジェクトへ追加する。
+
+```bash
+gcloud projects add-iam-policy-binding <project-id> \
+  --member="serviceAccount:$SA" --role=roles/cloudscheduler.admin --condition=None
+```
+
+足りないと、Rules・Hosting・Functions 本体まで通ってからその関数だけが落ちる。
+
+#### 付与するときの補足
+
+- **付与する側に `roles/resourcemanager.projectIamAdmin`（または Owner）が要る。** IAM の変更は
+  権限昇格にあたるため `scripts/setup.sh` では自動実行せず、手順として残している。
+- `roles/firebase.admin` は広いロールだが、Rules API の `:test` を含む最小の組み合わせを特定する
+  コストが高いため、**CI 専用の SA であること**を前提に admin ロールで妥協している。
+- 付与済みか確認する（プロジェクト単位の付与のみ。ランタイム SA に絞ったぶんは
+  `gcloud iam service-accounts get-iam-policy "$RUNTIME_SA"` で見る）:
+
+```bash
+gcloud projects get-iam-policy <project-id> \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:$SA" --format="value(bindings.role)"
+```
+
+#### 鍵を作って登録する
+
+```bash
 # サービスアカウント鍵を登録
 # （Firebase Console > プロジェクトの設定 > サービスアカウント > 新しい秘密鍵の生成）
 gh secret set FIREBASE_SERVICE_ACCOUNT < service-account.json
@@ -249,6 +542,94 @@ gcloud services enable cloudfunctions.googleapis.com \
 自動有効化される場合もあるが反映に時間がかかるため、事前に有効化しておくのが確実。
 [Google Cloud Console](https://console.cloud.google.com/apis/library) からも有効化可能。
 
+<!-- layer:mobile:start -->
+
+## ストア配信の自動化
+
+モバイルは Firebase のデプロイ対象ではない（`deploy.yml` は `apps/mobile/` を見ない）。
+代わりに `.github/workflows/mobile-release.yml` が、**`apps/mobile/app.config.ts` の `version` を
+上げた変更が `production` に入ったとき**に EAS でビルドし、ストアへ提出する。
+
+```
+eas build --profile production --platform <ios|android|all> --auto-submit --no-wait
+```
+
+| 自動でやること | 人がやること |
+| --- | --- |
+| production ビルドの作成（buildNumber / versionCode は EAS が増やす） | `version` を上げる |
+| App Store Connect へのアップロード（TestFlight に出る） | 審査への提出 |
+| Google Play の `internal` トラックへのアップロード（`eas.json` の `submit.production.android.track`） | 本番トラックへの昇格 |
+
+- **「version を上げた = モバイルを出す」に揃えている。** iOS は審査済みの version への
+  追加アップロードを拒否するため、version を上げずに自動で作ると失敗する。Web だけの
+  リリースでは version を触らなければ何も起きない
+- **version は評価せず、行を文字列で比べる。** push の直前のコミットと今回とで、
+  `app.config.ts` の最初の `version: '…'` の行が違えば提出する。`version` は文字列リテラルで
+  書いたままにすること（`version: pkg.version` のような式にすると検知できず、警告を出してスキップする）
+- **buildNumber / versionCode は手で管理しない。** `eas.json` の `appVersionSource: remote` と
+  `production.autoIncrement` で EAS 側が増やす
+- **ビルドの完了は待たない**（`--no-wait`）。ワークフローは投入した時点で成功になる。
+  ビルドと提出の結果は expo.dev のビルド一覧で確認する
+- **ワークフローに `concurrency` を置いていない。** 同じ group では待機中の run が後続に
+  置き換えられ、version を上げた push の run が取り消されると、その version が一度も
+  投入されないため。各 run はその push の範囲しか比べないので、並行しても二重投入にはならない
+
+### セットアップ
+
+1. **資格情報を EAS に預ける。** 署名証明書・App Store Connect API キー・Google の
+   サービスアカウント鍵は全て EAS 側に置く（`eas credentials`）。`eas.json` の
+   `submit.production` は実値にする（`ascAppId` 等）。`android.serviceAccountKeyPath` は
+   手元のファイルを指す設定で、CI にはそのファイルが無いので、鍵を EAS に預けて行を消す
+2. **手元で一度、同じコマンドを通す。** 対話で聞かれる項目（資格情報の生成・ストア側のアプリの
+   選択）を先に済ませておく。CI は `--non-interactive` で動くので、聞かれる項目が残っていると失敗する
+
+   ```bash
+   cd apps/mobile && npx eas-cli@latest build --profile production --platform all --auto-submit
+   ```
+
+3. **`EXPO_TOKEN` を登録する。** expo.dev の Access tokens で発行し（個人のトークンではなく
+   Robot user のものを推奨）、リポジトリの Secrets に入れる。ワークフローが使う秘密はこれだけ
+
+   ```bash
+   gh secret set EXPO_TOKEN
+   ```
+
+   未登録の間は、warning を出してスキップする（失敗にはしない）
+
+4. **片方のプラットフォームだけ自動で出すなら** Variables に `RELEASE_PLATFORM`（`ios` / `android` /
+   `all`。既定は `all`）を登録する。Play Console にアプリがまだ無いと EAS Submit が失敗するので、
+   iOS だけ先に出す場合に使う。ワークフローのファイルは Template Sync の対象なので、書き換えずに
+   Variables で切り替える
+
+   ```bash
+   gh variable set RELEASE_PLATFORM --body ios
+   ```
+
+### version の上げ方（release ブランチ運用）
+
+version を上げる変更は、他の変更と同じ経路で `production` に入れる。
+
+1. `chore/bump-mobile-<バージョン>` を切り（切り方は他の作業ブランチと同じ →「作業ブランチの切り方」）、
+   `apps/mobile/app.config.ts` の `version` を上げる
+2. `release/*` へ PR でマージする（`release/*` への直接コミットは禁止）。この時点では
+   何も提出されない — ワークフローが見るのは `production` への push だけ
+3. `release/*` → `production` の PR をマージすると、Web のデプロイ（`deploy.yml`）と並んで
+   モバイルの提出が走る
+
+緊急修正（`hotfix/*`）でモバイルも出すなら、同じく `version` を上げてから `production` へ入れる。
+
+### 手動で出す
+
+Actions の「Mobile Release」を **`production` ブランチで**手動実行する（プラットフォームを選べる）。
+version の比較はせず、その時点の `production` をビルドして提出する。失敗した回のやり直しや、
+後から片方のプラットフォームだけ出すときに使う。`production` 以外のブランチで実行した場合は
+warning を出してスキップする。
+
+`eas-cli` はワークフローの `EAS_CLI_VERSION` でメジャーを固定している。上げるときは
+テンプレート側で上げ、Template Sync で受け取る。
+
+<!-- layer:mobile:end -->
+
 ## マージルールの強制（プラン別）
 
 マージルール（production へは release/* と hotfix/* のみ等）の機械的な強制は、GitHub の契約プランによってできることが変わる。
@@ -256,6 +637,7 @@ gcloud services enable cloudfunctions.googleapis.com \
 ### 全プラン共通（同梱済み）
 
 `.github/workflows/branch-guard.yml` が production 向け PR の head ブランチを検証し、`release/*`・`hotfix/*` 以外なら CI を赤にする。
+アプリ単独のリリース（`release/<アプリ>/<バージョン>`）からの PR は、変更が `apps/<アプリ>/` の中に収まっているかも検査する。
 
 > **注意**: Free プランのプライベートリポジトリでは Required status checks が使えないため、これは「赤い ✗ による可視化」であり物理的なマージブロックではない。ただし本テンプレートではマージ操作の主体がかなりの割合で AI（Claude）であり、AI は「CI が赤の PR はマージしない」を守るため実効性は高い。
 
@@ -373,7 +755,7 @@ jobs:
 走らない PR ができる（required check が無いので、そのままマージできてしまう）。
 
 **チェック内容の修正が、各派生での取り込み作業ゼロで行き渡る。** ルールテストの追加や
-`firebase-tools` のバージョン固定のような修正は、テンプレート側の 1 コミットで全派生に効く。
+`firebase-tools` の版が無いときのフォールバック（→ #381）のような修正は、テンプレート側の 1 コミットで全派生に効く。
 Template Sync のファイルコピーと違い、コンフリクトも発生しない。
 
 ### 切り替え手順（派生プロジェクト側）
@@ -579,6 +961,17 @@ PAT だと、詰まる／詰まらない以前に次の2つが常時ついて回
 避けられるはず。
 
 scaffold 直後のリポジトリにこのラベルは無いので、先に作っておくのが確実。
+**`yarn setup` が、同期される設定の前提になっているラベルをまとめて作る**（不足分だけ。既にある
+ラベルには触らない）。ラベルはリポジトリの状態であってファイルではないので、Template Sync でも
+`/init-project` でも届かない。
+
+| ラベル | 要求しているもの |
+|---|---|
+| `template-sync` | `.github/workflows/template-sync.yml` の `pr_labels` |
+| `dependencies` / `security` | `renovate/default.json` |
+| `task` / `from-downstream` | `.github/ISSUE_TEMPLATE/` |
+
+手で作るなら次のとおり。
 
 ```bash
 gh label create template-sync
@@ -588,9 +981,16 @@ gh label create template-sync
 
 1. **App を作る** — Organization settings > Developer settings > GitHub Apps > New GitHub App
    （個人アカウント所有にするなら Settings > Developer settings > GitHub Apps）
-   - Repository permissions: **Contents: Read and write** / **Pull requests: Read and write**
+   - Repository permissions: **Contents: Read and write** / **Pull requests: Read and write** /
+     **Workflows: Read and write**
    - **Webhook の Active のチェックを外す**（このワークフローは webhook を使わない）
    - 親テンプレートは public なので、読み取り用の追加権限は要らない
+
+   `Workflows` が要るのは、同期の対象に `.github/workflows/` が入るため。無いと取り込み自体は
+   進んで、最後の push だけが
+   `refusing to allow a GitHub App to create or update workflow ... without 'workflows' permission`
+   で弾かれる。**権限を後から足した場合は、インストール側で変更を承認するまで反映されない**
+   （Organization settings > GitHub Apps に「Review request」が出る）。
 2. **Client ID を控え、Private key を生成する**（`.pem` がダウンロードされる）
 3. **インストールする** — 作った App をインストールし、対象を派生リポジトリに絞る
 4. **登録する** — Client ID は Variables、秘密鍵は Secrets（置き場所が違う）
@@ -636,8 +1036,9 @@ gh label create template-sync
 App を作れないとき（Organization の owner 権限が無い、個人リポジトリで scaffold した等）の代替。
 
 Settings > Developer settings > Personal access tokens > **Fine-grained tokens** で作る。
-Repository access に対象リポジトリ、権限は **Contents: Read and write** と
-**Pull requests: Read and write**（Metadata は自動で付く）。
+Repository access に対象リポジトリ、権限は **Contents: Read and write**、
+**Pull requests: Read and write**、**Workflows: Read and write**（Metadata は自動で付く）。
+`Workflows` は App と同じ理由で要る（同期の対象に `.github/workflows/` が入る）。
 
 ```bash
 gh secret set TEMPLATE_SYNC_TOKEN
@@ -662,6 +1063,90 @@ PR にワークフローを起こすために、外部のトークンが要る�
 なお、取り込み元（親テンプレート）の**読み取り**は `github.token` で行う。親は public で足りるうえ、
 App のインストールトークンは `owner` / `repositories` を指定しない限り自リポジトリにしか
 スコープされないため、別リポジトリを読む経路には使えない。
+
+### 取り込み対象外にする
+
+**派生プロジェクトで書き換えたファイルは、自分の `.templatesyncignore` に足す。**
+テンプレート同梱の `.templatesyncignore` には「プロジェクトごとに違うもの」（`apps/` `packages/`・
+Firebase 設定・`layers.json`・`.claude/hooks/config.sh` ほか）が入っているが、
+**そこに無いファイルは全て同期される。** 書き換えたまま足さないでいると、同期 PR が
+テンプレートの版を持ってくる（`scripts/deploy.sh` がこれに当たる）。
+
+```
+# .templatesyncignore の**末尾**（`# template-only:end` より後ろ）に足す
+scripts/deploy.sh
+```
+
+`# template-only:start` / `:end` の内側は**テンプレート本体だけが持つファイル**の一覧で、
+`scripts/check-docs.sh` と `scripts/test-docs-downstream.sh` がその意味で読む。派生が
+自分の版を持つファイルは外側（末尾）に置く。`.github/workflows/ci.yml` を参照方式にした派生では
+`scripts/adopt-references.mjs` が同じ場所へ自動で足すので、こちらは手作業が要らない
+（→「切り替え手順（派生プロジェクト側）」）。
+
+**効き始めるのは `production` に入ってから。** ワークフローの `actions/checkout` は ref 未指定＝
+デフォルトブランチを見るため、作業ブランチに足しただけでは次の同期に効かない（リリースに載せる）。
+すでに開いている同期 PR にも遡って効かないので、そちらは PR 上で戻す。
+
+一度入れば残る。`AndreasAugustin/actions-template-sync` は同期のたびに**除外ファイル自体を
+派生側の版へ戻してから**除外を適用する（`template-sync.yml` がピン留めしている v2.5.3 のソース
+`src/sync_template.sh` の `restore_templatesyncignore_file` で確認）。
+
+> ⚠️ **同じ理由で、テンプレート側が `.templatesyncignore` に足した行は派生に届かない。**
+> 除外の追加（`template-only` に入る本体専用スクリプト等）は同期で配られないため、
+> 古い派生には本体だけが持つファイルが流れ込み、`ci.yml` がそれを検出して実行してしまう。
+> テンプレートの `.templatesyncignore` と自分のものを、ときどき突き合わせること。
+>
+> **既存の派生が自分で足すもの**（テンプレート側では除外済み。届かないので手で足す）:
+>
+> ```
+> tests/              # ルールのテスト。ルール本体は同期対象外なのに、それを検証する
+>                     # テストだけが配られると ci.yml のルールテストが有効になり、
+>                     # テンプレート前提の assertion で必ず落ちる
+> .template-version   # どこまで取り込んだかの記録（本体は持たないので実害は無い）
+> ```
+>
+> **逆に、`template-only` の範囲にあるファイルが派生に残っていたら削除する。** 同期では
+> 更新も削除もされないので、テンプレート側で直しても（例: `publish.yml` へのリポジトリガード
+> 追加）古い版のまま動き続ける。削除する一覧は `/init-project` の §3.6。
+
+**書き換えていないなら足さない。** テンプレート側の修正が届かなくなるうえ、
+`check-docs.sh` がそのパスへの言及を参照切れとして検査しなくなる
+（同期では埋めようがないパス、という扱いになるため → `.claude/docs/hooks.md`）。
+
+### どこまで取り込んだかの記録（`.template-version`）
+
+同期 PR がマージされると、テンプレート側のハッシュは**同期 PR の本文にしか残らない**
+（action の既定の本文が `Merge <repo> <hash>`。`pr_commit_msg` はこのリポジトリで上書きして
+あり、ハッシュを含まない）。そのままだと「この派生はテンプレートのどの時点か」を、
+マージ済み PR を遡らないと言えない。
+
+そこで `template-sync.yml` が同期 PR のブランチへ `.template-version` を書き、
+同じ PR に載せる。**値の行は 1 行だけ**（残りは、読む人がファイル単体で意味を取れるよう
+置いた説明コメント）。
+
+```
+# （記録の意味を書いた説明コメント）
+synced_commit: <テンプレート側のコミットハッシュ>
+```
+
+**意味は「ここまで同期した」であって「テンプレートと同一」ではない。**
+`.templatesyncignore` の除外・派生で外した層・コンフリクト解決で落とした差分は
+この記録に現れない。親リポジトリへの報告（`bug_report.yml` の「取り込み済みのテンプレート」欄）
+はこの値を貼る。
+
+手で編集しない。書き換えても次の同期 PR が上書きする。
+
+**既存の派生には、次の同期 PR から載る。** ワークフローは派生リポジトリの既定ブランチに
+あるものが実行されるので、この変更を運んでくる同期 PR 自体は**古いワークフローが作る**
+（＝記録は付かない）。マージした次の同期から付き始める。テンプレート側に更新が無くて
+同期 PR が出ないあいだは作られないままなので、早く欲しければ Actions > Template Sync >
+Run workflow を手で叩く。
+
+> `.templatesyncignore` への追加は**新しく scaffold した派生にしか届かない。** 既存の派生は
+> 自分の `.templatesyncignore` が同期のたびに復元されるため（→「取り込み対象外にする」）、
+> テンプレート側で足したこの行は入らない。もっとも、テンプレート本体は `.template-version`
+> を持たないので、入らなくても上書きは起きない。この行が効くのは、本体が将来同名の
+> ファイルを持ったときだけ。
 
 ## ブランチ名とコミットメッセージの補足
 

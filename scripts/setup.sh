@@ -8,15 +8,41 @@ echo ""
 if grep -q "your-project-develop" .firebaserc 2>/dev/null; then
   echo "[todo] Firebase プロジェクト ID を設定してください"
   echo ""
-  echo "  3つの Firebase プロジェクトを作成してください:"
-  echo "  - develop:    開発環境（日常の開発）"
-  echo "  - staging:    ステージング環境（リリース前テスト）"
-  echo "  - production: 本番環境"
+  echo "  環境（develop / staging / production）の持ち方を選びます:"
+  echo ""
+  echo "  1) 環境ごとに Firebase プロジェクトを分ける（既定）"
+  echo "     develop / staging から本番データに触れない。"
+  echo "     Auth のユーザープール・モバイルの設定ファイル・IAM 付与・課金先が 3 セットになる。"
+  echo "  2) 1 つの Firebase プロジェクトに相乗りさせる（Hosting サイトだけ環境ごとに分ける）"
+  echo "     初期構築と維持が 1 セットで済む。"
+  echo "     Functions / Firestore ルールは環境で分けられない（全環境で同じものになる）。"
+  echo ""
+  echo "  → 判断材料: .claude/docs/git-workflow.md「Firebase プロジェクトの持ち方は2通りある」"
   echo ""
 
-  read -p "develop の Project ID (後で設定する場合は Enter): " DEV_ID
-  read -p "staging の Project ID (後で設定する場合は Enter): " STG_ID
-  read -p "production の Project ID (後で設定する場合は Enter): " PROD_ID
+  read -p "構成 [1/2] (既定: 1): " PROJECT_LAYOUT
+
+  if [ "$PROJECT_LAYOUT" = "2" ]; then
+    echo ""
+    echo "  1つの Firebase プロジェクトを作成してください。"
+    echo ""
+
+    read -p "Project ID (後で設定する場合は Enter): " SHARED_ID
+    DEV_ID="$SHARED_ID"
+    STG_ID="$SHARED_ID"
+    PROD_ID="$SHARED_ID"
+  else
+    echo ""
+    echo "  3つの Firebase プロジェクトを作成してください:"
+    echo "  - develop:    開発環境（日常の開発）"
+    echo "  - staging:    ステージング環境（リリース前テスト）"
+    echo "  - production: 本番環境"
+    echo ""
+
+    read -p "develop の Project ID (後で設定する場合は Enter): " DEV_ID
+    read -p "staging の Project ID (後で設定する場合は Enter): " STG_ID
+    read -p "production の Project ID (後で設定する場合は Enter): " PROD_ID
+  fi
 
   # 置換後の文字列は入力そのもの。sed の特殊文字（/ & \ 改行）を素通しすると
   # .firebaserc が壊れる（貼り付けミスで / が入るだけで起きる）
@@ -43,6 +69,21 @@ if grep -q "your-project-develop" .firebaserc 2>/dev/null; then
   replace_project_id your-project-production "$PROD_ID"
 
   echo "[done] .firebaserc を更新しました"
+
+  # 相乗り構成を選んでも Project ID が空なら .firebaserc はプレースホルダのまま
+  # （= 分離構成）。実態と違う案内を出さない
+  if [ "$PROJECT_LAYOUT" = "2" ] && [ -n "$SHARED_ID" ]; then
+    echo ""
+    echo "[next] 相乗り構成では、環境ごとに Hosting サイトを分けます:"
+    echo "  1. Firebase コンソールで環境ぶんの Hosting サイトを作る"
+    echo "  2. firebase target:apply hosting develop <サイト ID> （staging / production も同様）"
+    echo "  3. firebase.json の hosting を配列にし、各要素に target を書く"
+    echo "  → 手順: .claude/docs/git-workflow.md「Hosting のターゲットは環境名に合わせる」"
+    echo ""
+    echo "[note] functions / firestore / storage は環境で分かれません。"
+    echo "  deploy.sh は production 以外の環境では、これらを既定のデプロイ対象から外します"
+    echo "  （--only で明示すれば配れます）。"
+  fi
 else
   echo "[skip] .firebaserc は設定済みです"
 fi
@@ -76,9 +117,10 @@ fi
 echo ""
 
 # Node.js バージョンチェック
-# メジャーだけでなく minor も見る。@commitlint/* が engines.node で >=22.12.0 を
-# 要求するため、22.0〜22.11 はここを通ったあと yarn install が engines で落ちる
-REQUIRED_NODE=22
+# メジャーだけでなく minor も見る。firebase-admin が引く @firebase/database-compat が
+# engines.node で >=24.12.0 を要求するため、24.0〜24.11 はここを通ったあと
+# yarn install が engines で落ちる（#392。@commitlint/* の要求は >=22.12.0）
+REQUIRED_NODE=24
 REQUIRED_NODE_MINOR=12
 CURRENT_NODE=$(node -v 2>/dev/null | tr -d 'v')
 CURRENT_NODE_MAJOR=$(printf '%s' "$CURRENT_NODE" | cut -d'.' -f1)
@@ -103,12 +145,25 @@ else
   echo "  → npm install -g yarn"
 fi
 
-# Firebase CLI チェック
-if command -v firebase &> /dev/null; then
-  echo "[ok] firebase $(firebase --version)"
+# Firebase CLI チェック。
+# firebase-tools はルート package.json の devDependencies に固定し、yarn install で
+# node_modules/.bin/firebase に入れる（#381）。グローバルの CLI に頼ると、マシンや CI
+# ごとに版がずれて Functions エミュレーターの起動やデプロイが予告なく壊れる。
+# ルート package.json は Template Sync の対象外なので、固定していない派生では
+# 従来どおりグローバルの CLI を見たうえで、固定を促す
+if node -e "process.exit(require('./package.json').devDependencies?.['firebase-tools'] ? 0 : 1)" 2>/dev/null; then
+  if [ -x node_modules/.bin/firebase ]; then
+    echo "[ok] firebase $(node_modules/.bin/firebase --version)（node_modules に固定）"
+  else
+    echo "[info] firebase-tools は yarn install で node_modules に入ります（グローバルのインストールは不要）"
+  fi
+elif command -v firebase &> /dev/null; then
+  echo "[ok] firebase $(firebase --version)（グローバル）"
+  echo "  → 版を固定するには: yarn add -W -D firebase-tools@^15"
 else
   echo "[warn] Firebase CLI がインストールされていません"
-  echo "  → npm install -g firebase-tools"
+  echo "  → yarn add -W -D firebase-tools@^15（推奨。リポジトリで版を固定する）"
+  echo "  → または npm install -g firebase-tools@15"
 fi
 
 echo ""
@@ -142,6 +197,20 @@ detect_repo() {
   fi
 
   # owner/repo を抽出（BSD sed は非貪欲量指定子 .+? を解釈できないため多段置換。末尾の / と .git も除去）
+  #
+  # 先に github.com の URL かを確かめる。sed は一致しなければ入力をそのまま返すので、
+  # GitLab 等のリモートでも REPO が空にならず、URL 全体を owner/repo として gh api に
+  # 渡して「production ブランチがまだ存在しません」という無関係な案内になる（#316）
+  case "$REMOTE_URL" in
+    *github.com[:/]*) ;;
+    *)
+      # URL は出さない（https://<トークン>@host/... の形だと資格情報が画面に残る）
+      echo "[skip] origin が github.com のリポジトリではありません"
+      echo "  → ブランチ保護とラベルの設定は GitHub のリポジトリでのみ行います"
+      return 1
+      ;;
+  esac
+
   REPO=$(echo "$REMOTE_URL" | sed -E 's#.*github\.com[:/]##; s#/$##; s#\.git$##')
   if [ -z "$REPO" ]; then
     echo "[skip] GitHub リポジトリを検出できませんでした"
@@ -290,9 +359,62 @@ setup_release_protection() {
   fi
 }
 
+# 同期される設定が前提にしているラベルを作る（#365）。
+#
+# ラベルはリポジトリの状態であってファイルではないので、Template Sync でも
+# /init-project でも作られない。無いと Issue テンプレートのラベル指定は黙って
+# 無視され、Template Sync は PR の作成で失敗する
+# （→ .claude/docs/git-workflow.md「先に `template-sync` ラベルを作る」）。
+#
+#   template-sync   .github/workflows/template-sync.yml の pr_labels
+#   dependencies    renovate/default.json の labels
+#   security        renovate/default.json の vulnerabilityAlerts.labels
+#   task            .github/ISSUE_TEMPLATE/task.yml
+#   from-downstream .github/ISSUE_TEMPLATE/bug_report.yml / improvement.yml
+#
+# 既にあるラベルには触らない（--force は色と説明を上書きするので使わない）
+REQUIRED_LABELS='template-sync:ededed dependencies:0366d6 security:d93f0b task:ededed from-downstream:ededed'
+
+setup_labels() {
+  if ! EXISTING_LABELS=$(gh label list --repo "$REPO" --limit 1000 --json name --jq '.[].name' 2>/dev/null); then
+    echo "[skip] ラベルの一覧を取得できませんでした"
+    echo "  → 手動で作る場合: gh label create <名前>（必要なラベルは scripts/setup.sh の REQUIRED_LABELS）"
+    return
+  fi
+
+  MISSING_LABELS=''
+  for entry in $REQUIRED_LABELS; do
+    if ! printf '%s\n' "$EXISTING_LABELS" | grep -qxF "${entry%%:*}"; then
+      MISSING_LABELS="$MISSING_LABELS $entry"
+    fi
+  done
+
+  if [ -z "$MISSING_LABELS" ]; then
+    echo "[skip] 必要なラベルは作成済みです"
+    return
+  fi
+
+  MISSING_NAMES=$(for entry in $MISSING_LABELS; do printf '%s ' "${entry%%:*}"; done)
+  read -p "不足しているラベル（${MISSING_NAMES% }）を作成しますか？ (Y/n): " CREATE_LABELS
+  if [ "$CREATE_LABELS" = "n" ] || [ "$CREATE_LABELS" = "N" ]; then
+    echo "[skip] ラベルの作成をスキップしました"
+    return
+  fi
+
+  for entry in $MISSING_LABELS; do
+    if gh label create "${entry%%:*}" --repo "$REPO" --color "${entry##*:}" > /dev/null 2>&1; then
+      echo "[done] ラベル ${entry%%:*} を作成しました"
+    else
+      echo "[error] ラベル ${entry%%:*} の作成に失敗しました"
+      echo "  → リポジトリの Issues への書き込み権限があるか確認してください"
+    fi
+  done
+}
+
 if detect_repo; then
   setup_branch_protection
   setup_release_protection
+  setup_labels
 fi
 
 echo ""
@@ -305,8 +427,12 @@ if [ "$INSTALL" != "n" ] && [ "$INSTALL" != "N" ]; then
   echo "[done] 依存関係をインストールしました"
 
   # packages/shared の dist を生成（tailwind.config.js などの Node ランタイム
-  # から `require('@geckou/shared/theme')` を解決可能にするため）
-  yarn workspace @geckou/shared build
+  # から `require('<スコープ>/shared/theme')` を解決可能にするため）。
+  #
+  # ワークスペース名を書かずパスで指定する。/init-project がスコープを
+  # リネームすると名前指定は存在しないワークスペースを指し、set -e で
+  # ここから先（Template Sync の案内など）がまるごと出なくなる（#360）
+  yarn turbo build --filter='./packages/shared'
   echo "[done] packages/shared をビルドしました"
 fi
 
@@ -333,6 +459,6 @@ echo ""
 # 一度も動かないまま気付かれないので、セットアップの最後に案内だけ出す
 echo "Template Sync の設定（派生プロジェクトのみ）:"
 echo "  未登録だとテンプレートの更新が一度も届かない。GitHub App（推奨）か PAT"
-echo "  あわせて template-sync ラベルを作る（無いと初回の PR 作成が失敗する）"
+echo "  template-sync ラベルが要る（無いと初回の PR 作成が失敗する。上のラベル作成で作られる）"
 echo "  手順は .claude/docs/git-workflow.md「Template Sync の有効化」"
 echo ""

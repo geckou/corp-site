@@ -76,6 +76,23 @@ git -C "$DERIVED" init -q .
 echo "=== 派生プロジェクトでの docs-check ==="
 echo ""
 
+# --- 0. テンプレート本体を全部検査する ---
+#
+# check-docs.sh は「同期されるドキュメントが、同期されないパス（apps/ packages/、
+# プロダクト固有ドキュメント）を指している」場合を参照切れに数えない。派生では
+# 同期でその実体を埋められないため（#338）。ただしテンプレート本体では実体が揃って
+# いるので、その見逃しを切って回す。これをやらないと、apps/ を指す言及の綴り違いや
+# 移動漏れが本体でも黙って通る。
+#
+# 本体でだけ回せばよいので、本体しか持たないこのスクリプトに置く
+if strict_output=$(CHECK_DOCS_STRICT=1 bash "$REPO/scripts/check-docs.sh" 2>&1); then
+  pass "テンプレート本体では全ての言及が実在する（CHECK_DOCS_STRICT=1）"
+else
+  fail "テンプレート本体に参照切れがある（CHECK_DOCS_STRICT=1）" "$strict_output"
+fi
+
+echo ""
+
 # --- 1. テンプレート本体だけが持つファイルを消す ---
 TEMPLATE_ONLY=$(
   sed -n '/^# template-only:start$/,/^# template-only:end$/p' "$REPO/.templatesyncignore" |
@@ -131,7 +148,11 @@ fi
 # 独立した規則で押さえる: `.templatesyncignore` に載っている scripts/ と
 # .github/workflows/ のファイルは、派生プロジェクトが自分で作るものではなく
 # 同期でしか届かない。つまり載っている時点で「テンプレート本体だけが持つ」ので、
-# マーカーの外にあってはいけない
+# マーカーの外にあってはいけない。
+#
+# 見ているのは**テンプレート本体の** .templatesyncignore。派生プロジェクトが自分で
+# 書き換えたファイル（scripts/deploy.sh 等）を足す先はマーカーの外で、そちらは
+# この検査の対象にならない（→ .claude/docs/git-workflow.md「取り込み対象外にする」）
 outside=$(
   grep -v '^#' "$REPO/.templatesyncignore" | grep -v '^[[:space:]]*$' |
     grep -E '^(scripts/|\.github/workflows/)' |
@@ -147,6 +168,70 @@ else
     "$(printf '%s\n' "$outside")
 これらを指すドキュメントは派生で参照切れになります。
 .templatesyncignore の template-only:start / :end の中へ移してください。"
+fi
+
+# /init-project の §3.6 は、同じファイルを新規の派生から消す手順（rm -f の一覧）を
+# 別に持っている。Use this template はファイルを丸ごと複製するので、一覧から漏れた
+# ファイルは派生に残り、以後 Template Sync で更新も削除もされない。消し忘れは
+# check-docs.sh でも検出されない（template-only かつ実在しないパスは見逃す作り）ため、
+# 2 つの一覧のズレをここで検出する（#202 / #348）
+INIT_SKILL="$REPO/.claude/skills/init-project/SKILL.md"
+
+if [ ! -f "$INIT_SKILL" ]; then
+  fail "/init-project の手順書が無い" "$INIT_SKILL"
+else
+  # §3.6 の見出しから次の見出しまでの、rm -f とその継続行に並ぶパスを拾う
+  listed=$(
+    awk '
+      /^### 3\.6\./ { in_section = 1; next }
+      in_section && /^##/ { exit }
+      !in_section { next }
+      /^rm -f / { in_rm = 1; sub(/^rm -f /, "") }
+      in_rm {
+        continued = ($0 ~ /\\$/)
+        sub(/[[:space:]]*\\$/, "")
+        count = split($0, words, /[[:space:]]+/)
+        for (i = 1; i <= count; i++) if (words[i] != "") print words[i]
+        if (!continued) in_rm = 0
+      }
+    ' "$INIT_SKILL"
+  )
+
+  if [ -z "$listed" ]; then
+    fail "/init-project の §3.6 から rm -f の一覧を読めない" \
+      "見出し（### 3.6.）か rm -f の書き方が変わっていると、この検査は何も比べずに通ってしまう"
+  else
+    not_removed=$(
+      printf '%s\n' "$TEMPLATE_ONLY" | while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        printf '%s\n' "$listed" | grep -qxF "$file" || printf '%s\n' "$file"
+      done
+    )
+    not_ignored=$(
+      printf '%s\n' "$listed" | while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        printf '%s\n' "$TEMPLATE_ONLY" | grep -qxF "$file" || printf '%s\n' "$file"
+      done
+    )
+
+    if [ -z "$not_removed" ]; then
+      pass "template-only のファイルは全て /init-project の rm -f 一覧に載っている"
+    else
+      fail "template-only にあって /init-project の rm -f 一覧に無いファイルがある" \
+        "$(printf '%s\n' "$not_removed")
+新規の派生に残り、Template Sync で更新も削除もされない凍結ファイルになります。
+.claude/skills/init-project/SKILL.md の §3.6 の rm -f に足してください。"
+    fi
+
+    if [ -z "$not_ignored" ]; then
+      pass "/init-project の rm -f 一覧は全て template-only の範囲にある"
+    else
+      fail "/init-project の rm -f 一覧にあって template-only に無いファイルがある" \
+        "$(printf '%s\n' "$not_ignored")
+消しても次の Template Sync で戻ってきます。
+.templatesyncignore の template-only:start / :end の中へ足してください。"
+    fi
+  fi
 fi
 
 echo ""

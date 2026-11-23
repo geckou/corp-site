@@ -33,6 +33,7 @@ for hook in "$REPO"/.claude/hooks/*.sh; do
   fi
 done
 
+# 既定の対象は .claude/hooks/ と scripts/（どちらも macOS の bash 3.2 で実行される）
 if command -v node >/dev/null 2>&1; then
   node "$REPO/scripts/check-shell-compat.mjs" || exit 1
 else
@@ -163,6 +164,9 @@ run 2 'production への直接 push' 'git push origin production'
 run 2 'release/* への force push' 'git push --force origin release/1.0.0' feat/existing
 run 0 'release/* への push は ask（deny ではない）' \
   'git push origin release/1.0.0' feat/existing
+# 許可と ask はどちらも exit 0。メッセージを見ないと、黙って allow になる退行が通る（#317）
+expect '"permissionDecision": "ask"' 'release/* への push は確認を求める'
+expect 'デプロイを発火します' 'デプロイが発火することを伝える'
 run 2 '--no-verify による検証スキップ' "git commit --no-verify -m 'feat: x'" feat/existing
 run 2 '束ねた短縮フラグ（-am）でも規約を検証する' \
   "git commit -am 'wip'" feat/existing
@@ -222,6 +226,7 @@ echo
 echo '=== hotfix/* への push も確認を求める（staging へデプロイされる） ==='
 run 0 'hotfix/* への push は ask（deny ではない）' \
   'git push origin hotfix/1.0.1' feat/existing
+expect '"permissionDecision": "ask"' 'hotfix/* への push は確認を求める'
 
 echo
 echo '=== 検査の迂回を止める ==='
@@ -454,8 +459,10 @@ run 2 'サブコマンドが置換（判定不能）' 'git $(echo commit) -n -m 
 run 0 'git --version はサブコマンド無しでも通す' 'git --version' feat/existing
 run 0 'xargs へ渡す形は ask（deny ではない）' \
   "printf 'commit' | xargs git" feat/existing
+expect '"permissionDecision": "ask"' 'xargs 経由の実行は確認を求める'
 run 0 'パイプでシェルへ流す形は ask（deny ではない）' \
   "echo 'git commit -n -m wip' | sh" feat/existing
+expect '"permissionDecision": "ask"' 'パイプ経由のシェル実行は確認を求める'
 run 2 'パス付きシェルの heredoc も本文を検査する' \
   "/bin/sh <<'EOF'
 git commit -n -m wip
@@ -476,6 +483,7 @@ run 2 'refspec のグロブ（プレフィックス）' \
 run 2 'refspec に変数' 'git push origin HEAD:$b' feat/existing
 run 0 '--prune は ask（deny ではない）' \
   "git push --prune origin feat/existing" feat/existing
+expect '"permissionDecision": "ask"' '--prune は確認を求める'
 
 # #238: PR / Issue 本文に書いた git コマンドで止めない
 run 0 'gh pr create の本文に push の例を書く' \
@@ -859,6 +867,168 @@ run 0 'branch -M（改名）は分岐元を持たないので従来どおり' \
   'git branch -M feat/existing feat/renamed' feat/existing
 
 echo
+echo '=== 引用の中の置換・heredoc の本文で後続のコマンドを見失わない（#393） ==='
+run 2 'ダブルクォートの中のバッククォートのあとの push' \
+  'echo "x `date`" && git push origin production' feat/existing
+run 2 'gh pr create の本文（heredoc）にバッククォートがあっても後続の push を見る' \
+  "gh pr create --title \"feat: x\" --body \"\$(cat <<'EOF'
+## Summary
+use \`foo\` here
+EOF
+)\" && git push origin production" feat/existing
+run 2 'commit -F- の heredoc の本文に引用符があっても次の行の push を見る' \
+  "git commit -F- <<'EOF'
+feat: it's \"x\"
+EOF
+git push origin production" feat/existing
+run 2 'メッセージの中の置換に引用符があっても後続の push を見る' \
+  'git commit -m "feat: $(echo "it'"'"'s")" && git push origin production' feat/existing
+run 2 'メッセージの中の置換に ) を含む引用があっても -n を見る' \
+  'git commit -m "feat: $(echo ")")" -n' feat/existing
+run 2 '引用なしの置換の後ろの production への push' \
+  'git push $(git remote) production' feat/existing
+run 2 '2 個目の commit の件名も検証する' \
+  'git commit -m "feat: x" && git commit -m "wip"' feat/existing
+run 0 "'…'\\''…' の形の規約どおりの件名" \
+  "git commit -m 'feat: it'\\''s'" feat/existing
+
+run 2 'gh pr create の本文（heredoc）に引用符や括弧があっても後続の push を見る' \
+  "gh pr create --title \"feat: x\" --body \"\$(cat <<'EOF'
+it's (a \"quoted) text
+EOF
+)\" && git push origin production" feat/existing
+run 0 'gh pr create の本文に書いた git push の例は検査しない' \
+  "gh pr create --title \"feat: x\" --body \"\$(cat <<'EOF'
+git push origin production
+EOF
+)\"" feat/existing
+run 2 '引用なしのバッククォートの後ろの production への push' \
+  'git push `git remote` production' feat/existing
+
+run 0 '2 個の commit がどちらも規約どおりなら通す' \
+  'git commit -m "feat: x" && git commit -m "fix: y"' feat/existing
+run 2 '1 個目が規約違反なら 2 個目が規約どおりでも止める' \
+  'git commit -m "wip"; git commit -m "feat: x"' feat/existing
+run 0 'メッセージを取らない commit のあとの commit は、その -m を見る' \
+  'git commit --amend --no-edit && git commit -m "feat: x"' feat/existing
+run 0 '2 つ目の -m（本文）の中の ; は区切りではない' \
+  "git commit -m 'feat: x' -m 'body; text'" feat/existing
+run 0 'メッセージの中の置換に引用符がある規約どおりの件名' \
+  'git commit -m "feat: $(echo "it'"'"'s")"' feat/existing
+
+run 2 '置換で書いた push 先は判定できないので止める（引用なし）' \
+  'git push origin $(echo production)' feat/existing
+run 2 '置換で書いた push 先は判定できないので止める（引用付き）' \
+  'git push origin "$(echo production)"' feat/existing
+run 2 '置換で書いた push 先は判定できないので止める（バッククォート）' \
+  'git push origin `echo production`' feat/existing
+run 2 '置換で書いた refspec の宛先も止める' \
+  'git push origin feat/existing:$(echo production)' feat/existing
+run 2 '"$( … )" の中のバッククォートに書いた git を見る' \
+  'echo "$(echo `git push origin production`)"' feat/existing
+run 2 '"$( … )" の中の "`…`" に書いた git を見る' \
+  'echo "$(echo "`git push origin production`")"' feat/existing
+run 2 '引用の中の文字列の <<EOF を heredoc の開始と読まない' \
+  'echo "$(date) <<EOF"
+git push origin production
+EOF' feat/existing
+
+run 0 '中で git を呼ぶ置換の push 先は、引用の有無によらず通す' \
+  'git push -u origin $(git branch --show-current)' feat/existing
+
+echo
+echo '=== リダイレクトは引数として読まない（#397） ==='
+run 0 '2>&1 を分岐元と読まない' 'git checkout -b feat/x 2>&1 | tail -3'
+run 0 '>/dev/null 2>&1 を分岐元と読まない' 'git checkout -b feat/x >/dev/null 2>&1'
+run 0 '離れて書いた対象（2> log）を分岐元と読まない' 'git checkout -b feat/x 2> log'
+run 0 '名前に続けて書いたリダイレクト（feat/x>/dev/null）' 'git checkout -b feat/x>/dev/null'
+run 0 'git branch <名前> 2>&1' 'git branch feat/x 2>&1'
+run 2 'リダイレクトの手前の分岐元は従来どおり見る' \
+  'git checkout -b feat/x release/1.0.0 2>&1'
+expect '現在の分岐元: release/1.0.0' '分岐元として release を挙げる'
+run 2 '名前に続けて書いたリダイレクトでも命名規則を見る' 'git checkout -b Bad>/dev/null'
+run 2 '宛先に続けて書いたリダイレクトでも production への push を止める' \
+  'git push origin production>/dev/null' feat/existing
+expect 'production への直接 push' 'production への push として止める'
+run 2 '離れて書いたリダイレクトの後ろでも production への push を止める' \
+  'git push origin > log production' feat/existing
+run 0 '名前付きの fd（{fd}>）も分岐元と読まない' 'git checkout -b feat/x {fd}>/dev/null'
+run 2 '続けて書いたリダイレクトで --no-verify を隠せない' \
+  'git push origin --no-verify>x' feat/existing
+expect '--no-verify' '検証スキップとして止める'
+run 2 '語に続けて書いた &> の手前の production への push を止める' \
+  'git push origin production&>/dev/null' feat/existing
+run 2 '語に続けて書いた &> で --no-verify を隠せない' \
+  'git push origin --no-verify&>x' feat/existing
+run 2 'プロセス置換はリダイレクトとして外さない' \
+  'git checkout -b feat/x <(echo a) release/1.0.0'
+run 0 '引用の中の > はリダイレクトではない' \
+  'git commit -m "feat: a > b を追加"' feat/existing
+
+echo
+echo '=== アプリ単独のリリース release/<アプリ>/<バージョン> ==='
+run 0 'release/<バージョン> は従来どおり切れる' 'git checkout -b release/1.1.0'
+run 0 'release/<アプリ>/<バージョン> を切れる' 'git checkout -b release/site/0.1.0'
+run 0 '<アプリ> はケバブケースなら可' 'git checkout -b release/landing-page/1.0.0-rc1'
+run 2 '<アプリ> がケバブケースでない' 'git checkout -b release/Site/0.1.0'
+expect 'release/site/0.1.0' '書式の例を示す'
+run 2 '階層は <アプリ>/<バージョン> の 2 段まで' 'git checkout -b release/site/web/0.1.0'
+run 2 '<バージョン> が空' 'git checkout -b release/site/'
+run 2 'hotfix/ はアプリ単独を許さない' 'git checkout -b hotfix/site/0.1.0'
+run 0 'release/<アプリ>/* への push も ask' \
+  'git push origin release/site/0.1.0' feat/existing
+expect '"permissionDecision": "ask"' 'アプリ単独のリリースへの push も確認を求める'
+expect '既定では配らない' 'アプリ単独のリリースは既定で配らないことを伝える'
+run 2 'release/<アプリ>/* への force push は deny' \
+  'git push --force origin release/site/0.1.0' feat/existing
+run 0 'アプリ単独のリリースの取り込みは確認を求める' \
+  'git merge origin/release/site/0.1.0' feat/existing
+expect '"permissionDecision": "ask"' 'アプリ単独のリリースを作業ブランチへ取り込むときは確認を求める'
+run 0 'rebase でも確認を求める' 'git rebase origin/release/site/0.1.0' feat/existing
+expect 'アプリ単独のリリース' '取り込まない理由を伝える'
+run 0 '全体のリリースの取り込みは確認を求めない' \
+  'git merge origin/release/1.0.0' feat/existing
+refute 'permissionDecision' '全体のリリースは従来どおり素通し'
+
+echo
+echo '=== 引用の中の置換で、git の呼び方によらず中身を見る（#400） ==='
+run 2 '"$( … )" の中の改行のあとの git' \
+  'echo "$(echo hi
+git push origin production)"' feat/existing
+run 2 '"$( … )" の中の sh -c に書いた git' \
+  'echo "$(sh -c "git push origin production")"' feat/existing
+run 2 '"$( … )" の中のパス付きの git' \
+  'echo "$(/usr/bin/git push origin production)"' feat/existing
+run 2 '"$( … )" の中の \git' \
+  'echo "$(\git push origin production)"' feat/existing
+run 0 '"$( … )" の中の heredoc の本文に書いた git は数えない' \
+  "echo \"\$(cat <<'EOF'
+git push origin production
+EOF
+)\"" feat/existing
+run 0 '"$( … )" の中の git 以外のコマンドは従来どおり' \
+  'echo "$(date) $(echo "x (y)")" && git status' feat/existing
+run 0 '"$( … )" の中の sh -c に書いた git 以外のコマンド' \
+  'echo "$(sh -c "echo hi")"' feat/existing
+
+run 2 '"$( … )" の中の heredoc の後ろの git は見る' \
+  "echo \"\$(cat <<'EOF'
+x
+EOF
+echo; git push origin production)\"" feat/existing
+run 2 '記号を含むマーカー（A-B）の heredoc の後ろの git は見る' \
+  "echo \"\$(cat <<'A-B'
+x
+A-B
+  git push origin production)\"" feat/existing
+run 2 '引用の中の << は heredoc の開始ではない' \
+  "echo \"\$(echo '<<x'
+  git push origin production)\"" feat/existing
+run 2 '算術式の << は heredoc の開始ではない' \
+  'echo "$(echo $((1<<2))
+  git push origin production)"' feat/existing
+
+echo
 echo '=== 既存の挙動（回帰） ==='
 run 2 'ブランチ命名規則違反' 'git checkout -b wip'
 run 2 '許可リストに無いプレフィックス' 'git checkout -b feature/user-profile'
@@ -1099,7 +1269,35 @@ HOOK_CODE_EXTENSIONS='rules'
 export HOOK_CODE_EXTENSIONS
 run_dod 0 '対象拡張子から外れていれば走らせない' '{}'
 unset HOOK_CODE_EXTENSIONS
-run_dod 0 'stop_hook_active はコード変更があっても優先される' '{"stop_hook_active":true}'
+run_dod 0 'session_id が無ければ、継続中はコード変更があっても走らせない' \
+  '{"stop_hook_active":true}'
+
+# 回帰(#363): Stop フックは 4 つとも同じ stop_hook_active を受け取る。DoD だけが
+# 一律に早期 exit していたため、先に roadmap などがブロックした継続では DoD が
+# 一度も走らず、失敗したまま終了できていた
+DOD_MARKER="${TMPDIR:-/tmp}/claude-stop-dod-s-dod"
+rm -f "$DOD_MARKER"
+run_dod 2 '他のフックが先にブロックした継続でも DoD は走る' \
+  '{"stop_hook_active":true,"session_id":"s-dod"}'
+expect 'DoD 未達' 'DoD の失敗として伝える'
+run_dod 0 '同じセッションで 2 回目はブロックしない（無限ループ防止）' \
+  '{"stop_hook_active":true,"session_id":"s-dod"}'
+run_dod 2 '継続ではない次の Stop では改めて検査する' '{"session_id":"s-dod"}'
+run_dod 0 '自分がブロックした直後の継続は通す' \
+  '{"stop_hook_active":true,"session_id":"s-dod"}'
+HOOK_DOD_TASKS='type-check'
+export HOOK_DOD_TASKS
+run_dod 0 'DoD が通れば終了できる' '{"session_id":"s-dod"}'
+unset HOOK_DOD_TASKS
+run_dod 2 '通ったあとは印が消え、次の継続でまた検査する' \
+  '{"stop_hook_active":true,"session_id":"s-dod"}'
+rm -f "$DOD_MARKER"
+HOOK_DOD_TASKS='type-check'
+export HOOK_DOD_TASKS
+run_dod 0 '継続中でも DoD が通っていればブロックしない' \
+  '{"stop_hook_active":true,"session_id":"s-dod"}'
+unset HOOK_DOD_TASKS
+rm -f "$DOD_MARKER"
 
 # 回帰(#241): git status --porcelain は未追跡ディレクトリを 1 行にまとめるため、
 # 新しいディレクトリを丸ごと追加した作業で DoD が走らなかった
@@ -1125,12 +1323,45 @@ echo 'export const x = 1' > "$SESSION/probe.ts"
 
 echo
 echo '=== stop-dod-check: config.sh が無くても既定値で動く ==='
-# 既定のランナー（yarn）が無い環境では何もせず終了する
-run_dod 0 '既定値でも入力の判定は変わらない' '{"stop_hook_active":true}' \
-  "$NOCONFIG/stop-dod-check.sh"
-
-rm -f "$SESSION/probe.ts"
+# 既定のランナーは yarn、タスクは type-check / lint / test、対象は ts などの拡張子。
+# 呼ばれ方を記録する偽の yarn を PATH の先頭に置き、既定値の経路が実際に走ることを見る
+# （#317。以前は stop_hook_active=true を渡していて、config.sh も既定値も読む前に
+# exit していたため、「既定値で動く」は検証されていなかった）
 unset HOOK_RUNNER
+YARN_LOG=$SANDBOX/yarn-calls.log
+export YARN_LOG
+mkdir -p "$SANDBOX/yarn-bin"
+cat > "$SANDBOX/yarn-bin/yarn" <<'YARN'
+#!/bin/sh
+echo "$*" >> "$YARN_LOG"
+[ "$2" = lint ] && { echo "lint error"; exit 1; }
+exit 0
+YARN
+chmod +x "$SANDBOX/yarn-bin/yarn"
+SAVED_PATH=$PATH
+PATH=$SANDBOX/yarn-bin:$PATH
+
+: > "$YARN_LOG"
+run_dod 2 '既定のランナー（yarn）で DoD が走り、失敗すればブロックする' '{}' \
+  "$NOCONFIG/stop-dod-check.sh"
+expect 'yarn run lint' '既定のランナー名で失敗を伝える'
+LAST_OUT=$(cat "$YARN_LOG")
+expect 'run type-check' '既定のタスク（type-check）を実行する'
+expect 'run lint' '既定のタスク（lint）を実行する'
+expect 'run test' '既定のタスク（test）を実行する'
+
+# 既定の拡張子に当たらない変更では走らせない
+rm -f "$SESSION/probe.ts"
+echo 'memo' > "$SESSION/notes.md"
+: > "$YARN_LOG"
+run_dod 0 '既定の拡張子に当たらない変更では走らせない' '{}' \
+  "$NOCONFIG/stop-dod-check.sh"
+LAST_OUT=$(cat "$YARN_LOG")
+refute 'run' '対象外の変更ではランナーを呼ばない'
+rm -f "$SESSION/notes.md"
+
+PATH=$SAVED_PATH
+unset YARN_LOG
 
 # ---- session-start-questions.sh / stop-questions-reminder.sh ----
 #
@@ -1366,6 +1597,10 @@ run_branch 2 'worktree add <パス> -b（パスが先）' \
   'git worktree add ../wt -b feat/new-thing'
 run_branch 2 'worktree add -b <名前> <パス>' \
   'git worktree add -b feat/new-thing ../wt'
+# pre-git-guard 側と検出する形を揃える（束・値の連結）
+run_branch 2 'checkout -qb（束ねた短縮フラグ）' 'git checkout -qb feat/new-thing'
+run_branch 2 'checkout -bfoo（値の連結）' 'git checkout -bfeat/new-thing'
+run_branch 2 'switch -cfoo（値の連結）' 'git switch -cfeat/new-thing'
 run_branch 2 'git branch <名前>' 'git branch feat/new-thing'
 run_branch 2 'worktree add <パス>（-b 無し）は basename がブランチ名になる' \
   'git worktree add ../foo-bar'
@@ -1376,9 +1611,46 @@ run_branch 0 'git branch -D はブランチ作成ではない' 'git branch -D fe
 run_branch 0 '同じコマンドで merge 済みなら何も言わない' \
   'git checkout -b feat/new-thing && git merge origin/release/1.0.0'
 
+git -C "$SESSION" update-ref refs/remotes/origin/release/site/0.1.0 \
+  "$(git -C "$SESSION" rev-parse production)"
+run_branch 2 'アプリ単独のリリースと並んでいても全体のリリースは勧める' \
+  'git checkout -b feat/new-thing'
+expect 'release/1.0.0' '全体のリリースを挙げる'
+refute 'release/site/0.1.0' 'アプリ単独のリリースは取り込みを勧めない'
+
 git -C "$SESSION" update-ref -d refs/remotes/origin/release/1.0.0
+run_branch 0 'アプリ単独のリリースしか無ければ何も言わない' \
+  'git checkout -b feat/new-thing'
+git -C "$SESSION" update-ref -d refs/remotes/origin/release/site/0.1.0
 run_branch 0 '進行中の release/* が無ければ何も言わない' \
   'git checkout -b feat/new-thing'
+
+# ---- session-start-git-context.sh ----
+#
+# 全体のリリースとアプリ単独のリリースを分けて出す。origin が無いので fetch は失敗するが、
+# 一覧は手元の refs/remotes から作るので検査できる
+
+START_HOOK=$REPO/.claude/hooks/session-start-git-context.sh
+
+echo
+echo '=== session-start-git-context: リリースブランチの一覧 ==='
+git -C "$SESSION" update-ref refs/remotes/origin/release/1.0.0 \
+  "$(git -C "$SESSION" rev-parse production)"
+git -C "$SESSION" update-ref refs/remotes/origin/release/site/0.1.0 \
+  "$(git -C "$SESSION" rev-parse production)"
+LAST_OUT=$(cd "$SESSION" && sh "$START_HOOK" 2>&1)
+expect '- 進行中のリリースブランチ:
+  - release/1.0.0
+- 進行中のアプリ単独のリリース' '全体のリリースだけを「進行中のリリースブランチ」に挙げる'
+expect '（作業ブランチには取り込まない）:
+  - release/site/0.1.0' 'アプリ単独のリリースは別の見出しで挙げる'
+
+git -C "$SESSION" update-ref -d refs/remotes/origin/release/1.0.0
+LAST_OUT=$(cd "$SESSION" && sh "$START_HOOK" 2>&1)
+expect '進行中のリリースブランチ: なし' 'アプリ単独のリリースだけなら全体は「なし」'
+git -C "$SESSION" update-ref -d refs/remotes/origin/release/site/0.1.0
+LAST_OUT=$(cd "$SESSION" && sh "$START_HOOK" 2>&1)
+refute 'アプリ単独' 'アプリ単独のリリースが無ければ見出しを出さない'
 
 # ---- stop-roadmap-reminder.sh ----
 
@@ -1583,6 +1855,495 @@ HOOK_PR_BASE_BRANCH=feat/thing
 export HOOK_PR_BASE_BRANCH
 run_pr 0 '差し替えた既定ブランチと同じなら見ない' '{}'
 unset HOOK_PR_BASE_BRANCH
+echo
+echo '=== グローバルオプションと短縮フラグの束（#354）==='
+
+# 許可リストに無いグローバルオプションが 1 つ残るだけで、後続の判定が
+# `git <サブコマンド>` の形に一致せず全て素通りしていた（fail-open）。
+# 判定できない形は通さない
+run 2 '知らないグローバルオプションは判定不能として止める' \
+  'git --future-option commit -m "wip"' feat/existing
+expect 'グローバルオプション' '何が原因かを伝える'
+
+run 2 '知らないグローバルオプションの push も止める' \
+  'git --future-option push --force origin production'
+
+# 一覧へ足したぶんは、剥がしたうえで通常どおり検査する
+run 2 '-p を挟んでもコミットメッセージ規約を検証する' \
+  'git -p commit -m "wip"' feat/existing
+run 0 '-p を挟んでも規約どおりなら通す' \
+  'git -p commit -m "feat: x"' feat/existing
+run 2 '-p を挟んでも production への push を止める' \
+  'git -p push --force origin production'
+run 2 '--config-env での husky 迂回も止める' \
+  'git --config-env=core.hooksPath=HP commit -m "feat: x"' feat/existing
+
+# 値を取るオプションを一覧に足したら、-c を探す走査でも同じ扱いにする。
+# 片方だけだと走査が値のところで止まり、その後ろの -c を見落とす
+run 2 '値を空白で渡すグローバルオプションの後ろの -c も見る' \
+  'git --attr-source HEAD -c core.hooksPath=HP commit -m "feat: x"' feat/existing
+run 2 '同じく git config での永続設定も見る' \
+  'git --attr-source HEAD config core.hooksPath /dev/null' feat/existing
+run 0 '無関係な -c は止めない' \
+  'git -c user.name=x commit -m "feat: x"' feat/existing
+
+# 短縮フラグは束ねて書ける。単独トークンの -b / -c しか見ていないと、
+# ブランチ命名・分岐元の検査が外れる
+run 2 'checkout -qb でも命名規則を検査する' 'git checkout -qb badname'
+expect 'ブランチ命名規則違反' '命名規則として伝える'
+run 2 'switch -qc でも命名規則を検査する' 'git switch -qc badname'
+run 2 'checkout -qB でも命名規則を検査する' 'git checkout -qB badname'
+run 2 'worktree add -qb でも命名規則を検査する' \
+  'git worktree add -qb badname ../p'
+run 2 'checkout -qb の分岐元も検査する' \
+  'git checkout -qb feat/x release/1.0.0'
+expect '分岐元' '分岐元の違反として伝える'
+run 0 '束ねた形でも、規約どおりなら通す' 'git checkout -qb feat/x'
+
+# 値を連結した短縮フラグ（`-bfoo`）も実 git で有効なブランチ作成。
+# 束を 1 文字ずつに割るだけだと `-b -f -o -o` になり、ブランチ名が消える
+run 2 'checkout -bfoo（値の連結）でも命名規則を検査する' 'git checkout -bfoo'
+expect 'foo' '連結した値をブランチ名として取り出す'
+run 2 'switch -cbadname でも命名規則を検査する' 'git switch -cbadname'
+expect 'badname' 'switch でも名前を取り出す'
+run 2 'worktree add -bbadname でも命名規則を検査する' \
+  'git worktree add -bbadname ../p'
+
+# 束のままだと checkout が「既存ブランチへの切り替え」に見え、
+# 同じコマンド内の commit が production への直接コミットとして弾かれていた
+run 0 '束ねた checkout のあとの commit を、作成したブランチ宛てと見る' \
+  'git checkout -qb feat/x && git commit --allow-empty -m "feat: x"'
+run 0 '値を連結した checkout でも同じ' \
+  'git checkout -bfeat/x && git commit --allow-empty -m "feat: x"'
+
+# サブコマンドを取らない情報表示は、判定不能の網に掛けない。
+# 許可リストが実質の互換性契約になるので、8 種類すべてを見る
+for informational in --version -v --help -h --exec-path --html-path --man-path --info-path; do
+  run 0 "git ${informational} は通す" "git ${informational}"
+done
+run 0 'git --list-cmds=<group> も通す' 'git --list-cmds=main'
+
+echo
+echo '=== commit -m の値のあとに続くコマンド・フラグを検査から落とさない（#390）==='
+
+# 複数行の -m と commit -m の heredoc は、値を閉じる引用符が最終行に来る。
+# 行ごとに引用の状態を初期化していたため、閉じクォートが剥がされ、後続のコマンド
+# 全体がメッセージの値として検査から消えていた（Claude Code の標準のコミット形）
+HEREDOC_COMMIT="git commit -m \"\$(cat <<'EOF'
+feat: x
+EOF
+)\""
+
+run 2 'heredoc のコミットに ; で続けた production への push を止める' \
+  "$HEREDOC_COMMIT; git push origin production" feat/existing
+run 2 'heredoc のコミットに && で続けた production への push を止める' \
+  "$HEREDOC_COMMIT && git push origin production" feat/existing
+run 2 'heredoc のコミットのあとの命名違反のブランチ作成を止める' \
+  "$HEREDOC_COMMIT && git checkout -b bad_name" feat/existing
+run 2 'heredoc を閉じたあとの -n を止める' \
+  "$HEREDOC_COMMIT -n" feat/existing
+run 2 'heredoc を閉じたあとの --no-verify を止める' \
+  "$HEREDOC_COMMIT --no-verify" feat/existing
+run 2 'heredoc を閉じた行のコメントの次の行も検査する' \
+  "$HEREDOC_COMMIT # 説明
+git push origin production" feat/existing
+run 2 '複数行の -m に続けた force push を止める' \
+  'git commit -m "feat: x
+
+body" && git push --no-verify --force origin production' feat/existing
+run 2 '複数行の -m を閉じたあとの束ねた -an を止める' \
+  'git commit -m "feat: x
+
+body" -an' feat/existing
+run 2 '本文に閉じない引用符があっても、後続の push を止める' \
+  "git commit -m \"\$(cat <<'EOF'
+feat: x
+
+- say \"hi here
+EOF
+)\"; git push origin production" feat/existing
+
+# 置換を引用の中から切り出すと、commit のセグメントに開いたままの引用符が残り、
+# 置換の中身（と後続）が値として飲み込まれていた
+run 2 '-m の値の中の $( ) に書いた production への push を止める' \
+  'git commit -m "feat: x $(git push origin production)"' feat/existing
+run 2 '-m の値の中のバッククォートに書いた production への push を止める' \
+  'git commit -m "feat: x `git push origin production`"' feat/existing
+
+# 直したことで、通るべき形を止めていない
+run 0 'heredoc のコミットはそのまま通す' \
+  "$HEREDOC_COMMIT" feat/existing
+run 0 'heredoc のコミットに続けた作業ブランチへの push を通す' \
+  "$HEREDOC_COMMIT && git push origin feat/existing" feat/existing
+run 0 '複数行の -m に続けた作業ブランチへの push を通す' \
+  'git commit -m "feat: x
+
+body" && git push origin feat/existing' feat/existing
+run 0 '本文の行頭に -n と書いただけのコミットを通す' \
+  'git commit -m "feat: x
+
+-n は使わない
+--no-verify も使わない"' feat/existing
+run 0 '本文にアポストロフィがあっても通す' \
+  "git commit -m \"feat: x
+
+- it's fine\"" feat/existing
+run 0 '値の中の git でない置換は通す' \
+  'git commit -m "feat: $(date +%F) の更新"' feat/existing
+run 0 '値の中の git の置換は、規約どおりなら通す' \
+  'git commit -m "feat: x $(git rev-parse --short HEAD)"' feat/existing
+run 2 '値の中に git の置換があっても件名の規約は検証する' \
+  'git commit -m "wip $(git rev-parse HEAD)"' feat/existing
+
+# 引用の中の置換を切り出しても、外側のセグメントは切らない。置換より後ろが
+# git を含まない別のセグメントになると、フラグもブランチ名も検査から落ちる
+run 2 '置換を含む値を閉じたあとの --no-verify を止める' \
+  'git commit -m "feat: x $(git rev-parse --short HEAD)" --no-verify' feat/existing
+run 2 '置換を含む値を閉じたあとの -n を止める' \
+  'git commit -m "feat: x $(git rev-parse --short HEAD)" -n' feat/existing
+run 2 '置換を含む値を閉じたあとの束ねた -an を止める' \
+  'git commit -m "feat: x $(git rev-parse --short HEAD)" -an' feat/existing
+run 2 'バッククォートの置換を含む値のあとの -n を止める' \
+  'git commit -m "feat: x `git rev-parse --short HEAD`" -n' feat/existing
+run 2 '置換で書いた push 先のあとの --no-verify を止める' \
+  'git push origin "$(git branch --show-current)" --no-verify' feat/existing
+run 2 '置換で書いたリモートのあとの production を止める' \
+  'git push "$(git remote)" production' feat/existing
+run 2 '置換に続けて書いたブランチ名も命名規則で検証する' \
+  'git checkout -b "$(git rev-parse --short HEAD)_bad"' feat/existing
+run 2 '置換だけのブランチ名は検証できないので止める' \
+  'git switch -c "$(git rev-parse --short HEAD)"' feat/existing
+run 0 '件名の途中に git の置換があっても、規約どおりなら通す' \
+  'git commit -m "feat: $(git rev-parse --short HEAD) を更新"' feat/existing
+run 0 '置換で書いた作業ブランチへの push を通す' \
+  'git commit -m "feat: x" && git push -u origin "$(git branch --show-current)"' feat/existing
+
+# 引用の状態を行をまたいで持ち越すので、読みがシェルとずれると次の行まで
+# 「値の続き」になる。入れ子の引用符と ANSI-C クォートを閉じとして数えない
+run 2 '置換の中の引用符で読みがずれても、次の行の commit -n を止める' \
+  "git commit -m \"feat: \$(echo \"it's\")\"
+git commit -n -m \"feat: y\"" feat/existing
+run 2 'ANSI-C クォートの値のあとの行の束ねた -an を止める' \
+  "git commit -m \$'feat: it\\'s'
+git commit -an -m 'feat: y'" feat/existing
+run 2 'commit 以外の ANSI-C クォートの値のあとの行も同じ' \
+  "git push origin feat/existing -o \$'it\\'s'
+git commit -an -m \"feat: y\"" feat/existing
+run 2 'パラメータ展開の中の引用符で読みがずれても、次の行の commit -n を止める' \
+  "git commit -m \"feat: \${MSG:-\"it's default\"}\"
+git commit -n -m \"feat: y\"" feat/existing
+
+# 前段の引用の読みがずれると、&& や | の後ろが commit と同じ行に残る。
+# 後ろのコマンドの -n を commit の -n として数えない
+run 0 '入れ子の引用符を含む commit に続けた git log -n を通す' \
+  "git commit -m \"feat: \$(echo \"it's\")\" && git log -n 3" feat/existing
+run 0 '入れ子の引用符を含む commit をパイプした head -n を通す' \
+  "git commit -m \"feat: \$(echo \"it's\")\" | head -n 3" feat/existing
+run 0 'ANSI-C クォートの commit に続けた push -n（dry-run）を通す' \
+  "git commit -m \$'feat: it\\'s' ; git push -n origin feat/existing" feat/existing
+run 0 'ANSI-C クォートの commit の行末コメントの -n を通す' \
+  "git commit -m \$'feat: it\\'s' # comment -n" feat/existing
+run 2 '同じ形でも commit 自身の -n は止める' \
+  "git commit -m \"feat: \$(echo \"it's\")\" -n && git log -n 3" feat/existing
+run 2 '同じ形のあとに続けた 2 個目の commit -n も止める' \
+  "git commit -m \"feat: \$(echo \"it's\")\" && git commit -n -m \"feat: y\"" feat/existing
+run 0 '値の中に書いた区切り文字と -n は数えない' \
+  'git commit -m "feat: a; b && c | d -n"' feat/existing
+run 0 '区切りを空白なしで書いた後続の -n も数えない（;）' \
+  "git commit -m \"feat: \$(echo \"it's\")\";git log -n 3" feat/existing
+run 0 '区切りを空白なしで書いた後続の -n も数えない（&&）' \
+  "git commit -m \"feat: \$(echo \"it's\")\"&&git log -n 3" feat/existing
+run 0 '区切りを空白なしで書いた後続の -n も数えない（|）' \
+  "git commit -m \"feat: \$(echo \"it's\")\"|head -n 3" feat/existing
+run 2 '括弧で包んだ後続の commit -n を止める' \
+  "git commit -m \"feat: \$(echo \"it's\")\" && (git commit -n -m \"feat: y\")" feat/existing
+run 2 '置換で包んだ後続の commit -n を止める' \
+  "git commit -m \"feat: \$(echo \"it's\")\" && \$(git commit -n -m \"feat: y\")" feat/existing
+run 2 'リダイレクトの & は区切りとして数えない' \
+  'git commit -m "feat: x" -n &>/dev/null' feat/existing
+run 2 '2>&1 のあとのパイプより前の -n を止める' \
+  'git commit -n -m "feat: x" 2>&1 | cat' feat/existing
+
+echo
+echo '=== 行末の # コメントはコマンドの引数として読まない（#298）==='
+
+# コメント中の語が refspec・フラグ・分岐元として読まれ、誤った理由で止まっていた。
+# CLAUDE.md「Git ブランチ運用」のスニペット自体が行末コメントを使っている
+run 0 'コメント中の production を push 先と読まない' \
+  'git push origin feat/existing # not to production' feat/existing
+run 0 'コメント中の -n を commit -n と読まない' \
+  "git commit -m 'feat: x' # commit without -n" feat/existing
+run 0 'コメントの # を分岐元と読まない' \
+  'git checkout production && git pull && git checkout -b feat/new # 作業ブランチ'
+run 0 'コメントだけの行を挟んでも通す' \
+  "# まずコミットする
+git commit -m 'feat: x'" feat/existing
+
+# クォートの中と語の途中の # はコメントではない
+run 0 'クォート内の # はメッセージとして扱う' \
+  "git commit -m 'fix: #12 を直す'" feat/existing
+run 2 'クォート内の # より後ろも件名として検証する' \
+  'git commit -m "wip #12 feat: x"' feat/existing
+run 2 '語の途中の # はコメントにしない' \
+  'git checkout -b wip#12'
+
+# コメントを落とすことで、実行されるコマンドまで落としてはいけない
+run 2 'コメントより前の production への push は止める' \
+  'git push origin production # 例外'
+run 2 'コメントは改行で終わる（次の行の push は止める）' \
+  'echo start # ここから
+git push origin production'
+run 2 'コメントの前の --no-verify は止める' \
+  "git commit --no-verify -m 'feat: x' # 急ぎ" feat/existing
+run 2 'sh -c の中のコメントは引用の中で終わる' \
+  "sh -c 'echo a # b'; git push origin production"
+run 2 'eval の中のコメントも引用の中で終わる' \
+  'eval "echo a # b" && git push origin production'
+run 2 'バッククォートの中のコメントは閉じで終わる' \
+  'echo `echo a # b` && git push origin production'
+
+# 直前の生の文字が空白でも、語の先頭とは限らない。次の # をコメントとして落とすと、
+# シェルが実行する続きのコマンドが検査から丸ごと消える
+run 2 'エスケープされた空白のあとの # はコメントにしない' \
+  "echo a\\ #; git commit -n -m 'wip'" feat/existing
+run 2 'エスケープされた空白のあとの # より後ろの force push を止める' \
+  'echo a\ # ; git push --force origin production' feat/existing
+run 2 '${ } の中の # はコメントにしない（:=）' \
+  ': ${x:= #}; git push --no-verify origin production' feat/existing
+run 2 '${ } の中の # はコメントにしない（:-）' \
+  'echo ${a:- #b}; git push origin production' feat/existing
+run 2 '${ } の中の # はコメントにしない（置換）' \
+  'echo ${a/ #/x}; git push origin production' feat/existing
+run 2 '行継続の直後の # はコメントにしない' \
+  'echo a\
+#b; git commit --no-verify -m wip' feat/existing
+run 2 '置換の中のエスケープされた空白のあとの # はコメントにしない' \
+  'echo $(echo a\ #b; git push origin production)' feat/existing
+run 2 '${ } の外の } を閉じとして数えない' \
+  'echo a}b ${y:= #} && git push origin production' feat/existing
+run 2 '行頭側に } があっても ${ } の中の # はコメントにしない' \
+  "echo } \${x:= #}; git commit -n -m 'feat: x'" feat/existing
+run 2 '(( )) の中の # はコメントにしない' \
+  "(( 1 #2 )); git commit -n -m 'feat: x'" feat/existing
+run 0 '${ } を閉じたあとの # はコメントとして読む' \
+  'echo ${a:-b} # not to production
+git push origin feat/existing' feat/existing
+
+echo
+echo '=== commit -m "$(cat <<EOF …)" の本文中の git で止めない（#299）==='
+
+# 本文の行に空白区切りの git があると、$( … ) が「git を実行する置換」として
+# 切り出され、-m の値が空になって規約違反と判定されていた
+run 0 '本文にコマンド例を書いたコミットを通す' \
+  "git commit -m \"\$(cat <<'EOF'
+feat: x
+
+- 実行例: git commit -n を止めた
+EOF
+)\"" feat/existing
+run 0 '本文に括弧と git が混ざっていても通す' \
+  "git commit -m \"\$(cat <<'EOF'
+fix: 判定を直す
+
+- 置換の形 ( git push origin production ) を説明する
+EOF
+)\"" feat/existing
+run 2 '本文にコマンド例があっても件名の規約は検証する' \
+  "git commit -m \"\$(cat <<'EOF'
+wip
+
+- 実行例: git commit -n を止めた
+EOF
+)\"" feat/existing
+run 2 '本文にコマンド例があっても production への直接コミットは止める' \
+  "git commit -m \"\$(cat <<'EOF'
+feat: x
+
+- 実行例: git commit -n を止めた
+EOF
+)\""
+
+# 本物のコマンド置換は引き続き検査する
+run 2 '置換の中の commit -n も検査する' \
+  'git commit -m "feat: $(git commit -n -m wip)"' feat/existing
+run 0 '読み出すだけの置換は通す' \
+  'git commit -m "feat: x $(git rev-parse --short HEAD)"' feat/existing
+echo
+echo '=== commit 用のフラグ検査（-F / -t）は commit のセグメントだけを見る（#301）==='
+
+# 他のサブコマンドの同名フラグ（git grep -F / git checkout -t）に反応していた
+run 0 '後続の git grep -F をメッセージファイルの指定と読まない' \
+  "git commit -m 'feat: x' && git grep -F TODO" feat/existing
+run 0 '先行する git checkout -t を commit の --template と読まない' \
+  "git checkout -t -b feat/new origin/production && git commit --allow-empty -m 'feat: x'"
+run 0 'メッセージの値の中の -F / -t はフラグではない' \
+  "git commit -m 'docs: -F nothere.txt と -t の扱いを書く'" feat/existing
+run 0 'heredoc の本文に書いた -t / -F でも止めない' \
+  "git commit -F - <<'EOF'
+feat: x
+
+- git commit -t と git commit -F nothere.txt の扱いを説明する
+EOF" feat/existing
+
+# -F の相対パスは、その commit が動くディレクトリを基準に見る
+mkdir -p "$SESSION/sub"
+echo 'feat: サブディレクトリのメッセージ' > "$SESSION/sub/msg.txt"
+echo 'wip' > "$SESSION/sub/bad.txt"
+echo 'feat: ルートのメッセージ' > "$SESSION/rootmsg.txt"
+run 0 'cd 先にあるメッセージファイルを読む' \
+  'cd sub && git commit -F msg.txt' feat/existing
+run 0 'git -C 先にあるメッセージファイルを読む' \
+  'git -C sub commit -F msg.txt' feat/existing
+run 0 '--file= の形でも cd 先を基準にする' \
+  'cd sub && git commit --file=msg.txt' feat/existing
+run 2 'cd 先のファイルが規約違反なら止める' \
+  'cd sub && git commit -F bad.txt' feat/existing
+expect 'コミットメッセージ規約違反' '規約違反として伝える'
+run 2 'cd 先に無いファイルは読めないものとして止める' \
+  'cd sub && git commit -F rootmsg.txt' feat/existing
+expect '読めない' '読めないことを伝える'
+run 0 'cd しなければルートのファイルを読む' \
+  'git commit -F rootmsg.txt' feat/existing
+run 0 '絶対パスは cd に関係なく読む' \
+  "cd sub && git commit -F $SESSION/rootmsg.txt" feat/existing
+
+# commit に付いた -t / -F は引き続き検査する
+run 2 'git commit -t は止める' 'git commit -t template.txt' feat/existing
+expect '--template' 'テンプレートであることを伝える'
+run 2 'git commit --template= も止める' \
+  'git commit --template=template.txt' feat/existing
+run 2 '読めないファイルの -F は止める' \
+  'git commit -F nothere.txt' feat/existing
+expect '読めない' '読めないことを伝える'
+run 2 '束ねた -aF でも読めないファイルは止める' \
+  'git commit -aF nothere.txt' feat/existing
+run 2 '2 つ目の commit の -F も検査する' \
+  "git commit -m 'feat: x' && git commit -F nothere.txt" feat/existing
+run 2 '他のコマンドのあとの commit -t も止める' \
+  'git grep -F TODO; git commit -t template.txt' feat/existing
+rm -rf "$SESSION/sub" "$SESSION/rootmsg.txt"
+
+echo
+echo '=== pushd / popd の追跡と、設定を注入できない GIT_CONFIG_*（#315）==='
+
+# pushd は cd と同じく実行ディレクトリを変える。追跡しないと、別リポジトリへの
+# commit にこのリポジトリの規約を当ててしまう
+run 0 'pushd で別リポジトリへ移動してから commit' \
+  "pushd $OTHER && git commit -m 'wip'; popd"
+run 0 'pushd のリダイレクト付きでも追跡する' \
+  "pushd $OTHER > /dev/null && git commit -m 'wip' && popd > /dev/null"
+run 0 'pushd のパスに空白がある' \
+  "pushd \"$SPACED\" && git commit -m 'なにか'"
+run 0 'サブシェル内の pushd' "(pushd $OTHER && git commit -m 'wip')"
+run 0 '引数なしの pushd は先頭と入れ替える（別リポジトリへ戻る）' \
+  "cd $OTHER && pushd $SESSION && pushd && git commit -m 'wip'"
+
+# popd で戻ってきたあと・追跡できない形は、引き続き検査する
+run 2 'popd で戻ったあとの production 直コミット' \
+  "pushd $OTHER && git status && popd && git commit -m 'feat: x'"
+run 2 'popd のリダイレクト付きでも戻ったと判定する' \
+  "pushd $OTHER >/dev/null; git status; popd >/dev/null 2>&1; git commit -m 'feat: x'"
+run 2 'pushd でセッションのリポジトリへ入ってからの commit' \
+  "cd $OTHER && pushd $SESSION && git commit -m 'feat: x'"
+run 2 'サブシェルの pushd は親スコープへ漏らさない' \
+  "(pushd $OTHER && git status) && git commit -m 'feat: x'"
+run 2 'サブシェルを抜けたら pushd のスタックも戻る' \
+  "pushd $OTHER && (popd) && popd && git commit -m 'feat: x'"
+run 2 'スタックが空の popd では移動しない' \
+  "popd; git commit -m 'feat: x'"
+run 2 '引数なしの pushd で戻ってきたあとも検査する' \
+  "pushd $OTHER && pushd && git commit -m 'feat: x'"
+run 2 '解決できないパスへの pushd は安全側（検査対象に残す）' \
+  'pushd "$OTHER_REPO" && git commit -m "なにか"'
+run 2 'pushd -n（移動しない）は安全側' \
+  "pushd -n $OTHER && git commit -m 'feat: x'"
+run 2 'pushd +N（回転）は安全側' \
+  "pushd $OTHER && pushd +1 && git commit -m 'feat: x'"
+run 2 'popd +N のあとは安全側' \
+  "pushd $OTHER && popd +0; git commit -m 'feat: x'"
+
+# グローバル・システム設定の読み先を変えるだけの変数は、リポジトリローカルの
+# core.hooksPath を上書きできない。設定を注入できる変数だけを止める
+run 0 'GIT_CONFIG_NOSYSTEM は husky の迂回ではない' \
+  "GIT_CONFIG_NOSYSTEM=1 git commit -m 'feat: x'" feat/existing
+run 0 'GIT_CONFIG_GLOBAL も対象外' \
+  "GIT_CONFIG_GLOBAL=/dev/null git commit -m 'feat: x'" feat/existing
+run 0 'GIT_CONFIG_SYSTEM も対象外' \
+  "GIT_CONFIG_SYSTEM=/dev/null git commit -m 'feat: x'" feat/existing
+run 0 'export GIT_CONFIG_NOSYSTEM も対象外' \
+  "export GIT_CONFIG_NOSYSTEM=1; git commit -m 'feat: x'" feat/existing
+run 2 '対象外の変数を前置きしても規約は検証する' \
+  "GIT_CONFIG_NOSYSTEM=1 git commit -m 'wip'" feat/existing
+run 2 'GIT_CONFIG_COUNT での注入は引き続き止める' \
+  "GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m 'feat: x'" \
+  feat/existing
+expect 'husky の無効化は禁止' '迂回として伝える'
+run 2 'GIT_CONFIG_PARAMETERS での注入も引き続き止める' \
+  "GIT_CONFIG_PARAMETERS=\"'core.hooksPath=/dev/null'\" git commit -m 'feat: x'" \
+  feat/existing
+run 2 'export GIT_CONFIG_COUNT も引き続き止める' \
+  "export GIT_CONFIG_COUNT=1; git commit -m 'feat: x'" feat/existing
+
+echo
+echo '=== production へ切り替えてから分岐する形の分岐元（#387）==='
+
+# && の直後で改行しても、シェル上は && で繋がっている
+run 0 '&& の直後で改行した形も production 起点と見る' \
+  'git checkout production &&
+git checkout -b feat/new1' feat/existing
+run 0 '&& と改行で 3 行に分けた形' \
+  'git checkout production &&
+  git pull &&
+  git checkout -b feat/new1' feat/existing
+
+# `checkout <branch> --`（後ろが空）と switch は切り替え。復元として読み飛ばすと、
+# その前の production への切り替えが分岐元として残る
+run 2 'checkout <branch> -- は切り替えとして数える' \
+  'git checkout production && git checkout feat/other -- && git checkout -b feat/new1' feat/existing
+run 2 'switch <branch> -- も切り替えとして数える' \
+  'git checkout production && git switch feat/other -- && git switch -c feat/new1' feat/existing
+run 2 'checkout production <file> は切り替えとして数えない' \
+  'git checkout production README.md && git checkout -b feat/b' feat/existing
+run 2 'checkout - の行き先は分岐元にしない' \
+  'git checkout production && git checkout - && git checkout -b feat/b' feat/existing
+run 0 'checkout -b <名前> <起点> は復元と読まない' \
+  'git checkout production && git checkout -b feat/b production' feat/existing
+
+# パスの復元はブランチを切り替えない
+run 2 'checkout production -- <file> は切り替えとして数えない' \
+  'git checkout -q production -- README.md && git checkout -b feat/b' feat/existing
+run 2 'checkout -p production は切り替えとして数えない' \
+  'git checkout -p production && git checkout -b feat/b' feat/existing
+
+# checkout と production の間にフラグを挟むと、分岐元が production と判定されず、
+# 実行時点の HEAD（別の作業ブランチ）から切ったものとして拒否されていた
+run 0 'checkout -q production のあとの分岐を production 起点と見る' \
+  'git checkout -q production && git checkout -b fix/b' feat/existing
+run 0 'switch --quiet production のあとの switch -c' \
+  'git switch --quiet production && git switch -c feat/b' feat/existing
+run 0 'フラグ・pull・束ねた -qb を挟んでも同じ' \
+  'git checkout -f production && git pull && git checkout -qb feat/b' feat/existing
+run 0 'git branch <名前> で切る形でも同じ' \
+  'git checkout -q production && git branch feat/b' feat/existing
+run 0 'フラグ無しの形は従来どおり通す' \
+  'git checkout production && git pull && git checkout -b feat/b' feat/existing
+
+# production へ切り替えたと言えない形は、現在ブランチを分岐元として止める
+run 2 '別のブランチへ切り替えてからの分岐は止める' \
+  'git checkout -q feat/other && git checkout -b feat/b' feat/existing
+expect '分岐元' '分岐元の違反として伝える'
+run 2 '分岐元を明示していれば、そちらを見る' \
+  'git checkout -q production && git checkout -b feat/b release/1.0.0' feat/existing
+run 2 '; で区切った形は切り替えの成功を前提にしない' \
+  'git checkout -q production ; git checkout -b feat/b' feat/existing
+run 2 '|| で繋いだ形も前提にしない' \
+  'git checkout production || git checkout -b feat/b' feat/existing
+run 2 '分岐より後ろの checkout production は分岐元ではない' \
+  'git checkout -b feat/b && git checkout production' feat/existing
+run 2 'production のあとに別のブランチへ移っていれば止める' \
+  'git checkout production && git checkout -q feat/other && git checkout -b feat/b' feat/existing
+
+
 # ---- scripts/check-shell-compat.mjs ----
 #
 # bash 3.2（macOS の /bin/sh）で構文解析できない書き方の検出そのものを検証する。
@@ -1612,13 +2373,13 @@ if command -v node >/dev/null 2>&1; then
   # 引数として渡すだけの case / esac は予約語ではない（sh -n が通る形）
   printf "value=\$(printf '%%s' case)\nz=\$(printf '%%s' esac)\n" >> "$COMPAT_OK/ok.sh"
 
-  # run_compat <期待する終了コード> <説明> <検査対象のディレクトリ>
+  # run_compat <期待する終了コード> <説明> <検査対象のディレクトリ>...
   run_compat() {
     want=$1
     desc=$2
-    dir=$3
+    shift 2
 
-    LAST_OUT=$(node "$REPO/scripts/check-shell-compat.mjs" "$dir" 2>&1)
+    LAST_OUT=$(node "$REPO/scripts/check-shell-compat.mjs" "$@" 2>&1)
     status=$?
 
     if [ "$status" = "$want" ]; then
@@ -1639,6 +2400,98 @@ if command -v node >/dev/null 2>&1; then
   # 検査が厳しすぎると、正しいスクリプトで CI が落ちる
   run_compat 0 '引数の case / esac では誤検出しない' "$COMPAT_OK"
   run_compat 0 'フック本体は通る' "$REPO/.claude/hooks"
+
+  echo
+  echo '=== check-shell-compat: 検査対象・サブシェル・heredoc（#362）==='
+
+  # サブシェルで開く置換。case と esac の数は合う（サブシェルの括弧が帳尻を合わせる）が、
+  # bash 3.2 ではパターンの ) で置換が切れて構文エラーになる
+  COMPAT_SUBSHELL="$SANDBOX/compat subshell"
+  COMPAT_SUBSHELL_TIGHT="$SANDBOX/compat subshell tight"
+  mkdir -p "$COMPAT_SUBSHELL" "$COMPAT_SUBSHELL_TIGHT"
+  printf 'v=$( (case "$x" in\n  a) echo one ;;\nesac) )\n' > "$COMPAT_SUBSHELL/subshell.sh"
+  # 空白を入れない $(( も、閉じが )) でなければ算術展開ではなく置換
+  printf 'v=$((case "$x" in\n  a) echo one ;;\nesac) )\n' > "$COMPAT_SUBSHELL_TIGHT/tight.sh"
+  run_compat 1 'サブシェルで開く置換の中の素の case を検出する' "$COMPAT_SUBSHELL"
+  expect 'subshell.sh:2' 'パターンの行を指す'
+  run_compat 1 '$(( で始まる置換（算術展開ではない）でも検出する' "$COMPAT_SUBSHELL_TIGHT"
+
+  # 通る形: パターンを ( で開いたサブシェル、算術展開、引用した heredoc の本文
+  COMPAT_OK2="$SANDBOX/compat ok2"
+  mkdir -p "$COMPAT_OK2"
+  {
+    printf 'v=$( (case "$x" in\n  (a) echo one ;;\nesac) )\n'
+    printf 'n=$(( (1 + 2) * 3 ))\nm=$((n << 2))\n'
+    # 区切り語を引用した heredoc の本文はシェルが解釈しない
+    printf "cat <<'EOT'\nv=\$(case \"\$x\" in a) echo one ;; esac)\nEOT\n"
+    printf 'cat <<"EOT"\nv=$(case "$x" in b) echo one ;; esac)\nEOT\n'
+    printf 'cat <<\\EOT\nv=$(case "$x" in c) echo one ;; esac)\nEOT\n'
+    printf "cat <<-'EOT'\n\tv=\$(case \"\$x\" in d) echo one ;; esac)\n\tEOT\n"
+    # 本文の引用符が後続の読み方を狂わせないこと（閉じていない引用符を置く）
+    printf "cat <<'EOT'\nit's \"unbalanced\nEOT\nok=\$(case \$y in (e) echo 1 ;; esac)\n"
+  } > "$COMPAT_OK2/ok.sh"
+  run_compat 0 '引用した heredoc の本文・算術展開・( で開いたサブシェルは通す' "$COMPAT_OK2"
+
+  # 読み飛ばすのは本文だけ。heredoc の行の残りと、本文の後ろは引き続き検査する
+  COMPAT_AFTER="$SANDBOX/compat after heredoc"
+  COMPAT_SAMELINE="$SANDBOX/compat heredoc line"
+  COMPAT_UNQUOTED="$SANDBOX/compat unquoted heredoc"
+  mkdir -p "$COMPAT_AFTER" "$COMPAT_SAMELINE" "$COMPAT_UNQUOTED"
+  printf "cat <<'EOT'\nbody\nEOT\nx=\$(case \$y in a) echo 1 ;; esac)\n" > "$COMPAT_AFTER/after.sh"
+  run_compat 1 'heredoc の後ろの素の case は検出する' "$COMPAT_AFTER"
+  expect 'after.sh:4' 'heredoc の後ろの行を指す'
+  printf "cat <<'EOT' > \"\$(case \$y in a) echo 1 ;; esac)\"\nbody\nEOT\n" > "$COMPAT_SAMELINE/line.sh"
+  run_compat 1 'heredoc と同じ行の素の case は検出する' "$COMPAT_SAMELINE"
+  # 区切り語を引用しない heredoc の本文は展開される（= 中の $( ) が実行される）
+  printf 'cat <<EOT\n$(case $y in a) echo 1 ;; esac)\nEOT\n' > "$COMPAT_UNQUOTED/unquoted.sh"
+  run_compat 1 '引用しない heredoc の本文の置換は検出する' "$COMPAT_UNQUOTED"
+
+  # 複数のディレクトリを渡せる。1 つでも落ちれば失敗
+  run_compat 1 '複数ディレクトリのどれかに問題があれば落ちる' "$COMPAT_OK" "$COMPAT_BARE"
+  expect 'bare.sh' '問題のあるファイルを指す'
+  run_compat 0 '複数ディレクトリが全て通れば通る' "$COMPAT_OK" "$COMPAT_OK2"
+
+  # 引数で渡したディレクトリが無いのは指定の誤り。スタックトレースではなく理由を出す
+  run_compat 1 '存在しないディレクトリを渡したら理由を出して落ちる' "$SANDBOX/compat missing"
+  expect '検査対象のディレクトリがありません' '理由を伝える'
+  refute 'ENOENT' '未捕捉の例外にしない'
+
+  # 既定の対象は「スクリプトの位置から見た .claude/hooks/ と scripts/」。
+  # 層を外した最小構成では .claude/hooks/ が無いことがあるので、無ければ飛ばす
+  COMPAT_PROJECT="$SANDBOX/compat project"
+  mkdir -p "$COMPAT_PROJECT/scripts"
+  cp "$REPO/scripts/check-shell-compat.mjs" "$COMPAT_PROJECT/scripts/"
+  printf 'x=$(case $y in (a) echo 1 ;; esac)\n' > "$COMPAT_PROJECT/scripts/ok.sh"
+
+  # run_compat_default <期待する終了コード> <説明>: 引数なし（既定の対象）で実行する
+  run_compat_default() {
+    want=$1
+    desc=$2
+
+    LAST_OUT=$(node "$COMPAT_PROJECT/scripts/check-shell-compat.mjs" 2>&1)
+    status=$?
+
+    if [ "$status" = "$want" ]; then
+      pass=$((pass + 1))
+      printf 'ok   [%s] %s\n' "$status" "$desc"
+    else
+      fail=$((fail + 1))
+      printf 'FAIL [want %s got %s] %s\n     out: %s\n' "$want" "$status" "$desc" "$LAST_OUT"
+    fi
+  }
+
+  run_compat_default 0 '.claude/hooks/ が無い構成でも落ちない'
+  expect 'スキップ' '飛ばしたことを伝える'
+  refute 'ENOENT' '未捕捉の例外にしない'
+  printf 'x=$(case $y in a) echo 1 ;; esac)\n' > "$COMPAT_PROJECT/scripts/bare.sh"
+  run_compat_default 1 '既定で scripts/ も検査する'
+  expect 'bare.sh' 'scripts/ のファイルを指す'
+  rm -f "$COMPAT_PROJECT/scripts/bare.sh"
+  mkdir -p "$COMPAT_PROJECT/.claude/hooks"
+  printf 'x=$(case $y in a) echo 1 ;; esac)\n' > "$COMPAT_PROJECT/.claude/hooks/hook.sh"
+  run_compat_default 1 '既定で .claude/hooks/ も検査する'
+  expect 'hook.sh' 'フックのファイルを指す'
+  run_compat 0 'このリポジトリの scripts/ は通る' "$REPO/scripts"
 else
   echo 'node が無いため check-shell-compat の検証をスキップします'
 fi
