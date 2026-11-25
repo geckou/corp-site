@@ -50,7 +50,30 @@
 - 補足: `scripts/test-layers.sh`（層スクリプトの回帰テスト）はテンプレート本体のリポジトリの形を
   前提にしており派生では通らないため、同期対象から外して削除した（→ geckou/project-starter#326）
 
-### Q-002 Firestore ルールのテストを持つか
+### Q-004 テンプレート（親）との差分を無くすか
+
+- 回答: 2026-11-25 / **全て親版に揃える**（Q-002 / Q-003 と、Q-001 の Node 22 固定を置き換える）
+- 反映済み（テンプレート同期 PR 内）:
+  - `scripts/deploy.sh` / `scripts/use-env.sh` / `.github/workflows/deploy.yml` を親版に。
+    固有の除外を `.templatesyncignore` から外し、親の `.templatesyncignore` をベースに
+    固有分（`architecture.md` / `workflow.md` / `ci.yml` / `.claude/launch.json`）だけ残した
+  - `firestore.rules` / `storage.rules` / `tests/` / `scripts/test-rules.sh` /
+    `firebase.rules-test.json` を親版に（親の deploy.yml がルールテストを必須で走らせるため）
+  - Node 24: `.nvmrc`、`firebase.json` の `runtime: nodejs24`、`apps/functions` の
+    `engines` / esbuild target / `@types/node`
+  - `TYPO_CHECK_API_KEY` / `REVENUECAT_WEBHOOK_AUTH` を Secret Manager（`defineSecret`）へ移し、
+    `.env` から外した（親の use-env.sh には固有キーを足す口が無い）。`TYPO_CHECK_API_URL` は
+    コードから参照されていなかったので削除
+- 挙動の変化: feat/fix 等の push で develop へ自動デプロイしなくなる（develop は `yarn deploy:develop` で手動）。
+  Functions・ルールは production だけが配る（相乗り構成）ため、stg/dev のフォームも本番の `api` を呼ぶなら
+  本番の `ALLOWED_ORIGINS` に stg/dev のオリジンを含める
+- `.templatesyncignore` の `firestore.rules` / `storage.rules` / `tests/` は親のベースどおり除外のまま。
+  中身は 37ba79b の親版で、親が変えても自動では追従しない（親のルールテストを更新したら手で取り込む）
+- `/contact-sample` の専用 Basic 認証（`CONTACT_TEST_AUTH`）は親版の use-env.sh では SSR に届かず、全環境で 404 になる。
+  テストページは使わないので削除する（2026-11-25 回答。hotfix の PR で削除）
+- マージ前に必要な作業（人）: PR 本文を参照
+
+### Q-002 Firestore ルールのテストを持つか（→ Q-004 で置き換え）
 
 - 回答: 2026-09-08 / **B（`test:rules` を消して、ルールテストを持たないことを明示する）を採用**
 - 判断の理由: このサイトは Firestore を実質使っていない。
@@ -75,7 +98,7 @@
   `.nvmrc` 参照に変更。`@commitlint/*` の v19 固定（`resolutions` と `cli` のレンジ）を解除し、
   `.templatesyncignore` から `.nvmrc` の除外を削除した
 
-### Q-003 デプロイ経路をテンプレートに寄せるか
+### Q-003 デプロイ経路をテンプレートに寄せるか（→ Q-004 で置き換え）
 
 - 回答: 2026-09-08 / **A（当面このまま同期対象から外しておく）を採用**
 - 判断の理由: 本番デプロイ経路なので、寄せるなら develop で通してからにしたい。

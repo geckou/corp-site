@@ -3,6 +3,7 @@ import express from 'express'
 import { onRequest } from 'firebase-functions/v2/https'
 
 import { requireAuth, type AuthenticatedRequest } from './lib/auth-middleware'
+import { REVENUECAT_WEBHOOK_AUTH, TYPO_CHECK_API_KEY } from './lib/secrets'
 import { handleTypoCheck } from './lib/typo-check'
 import { handleRevenueCatWebhook } from './revenuecat-webhook'
 
@@ -31,4 +32,10 @@ app.get('/me', requireAuth, (req, res) => {
 })
 
 // hosting (frameworksBackend) とリージョンを揃える
-export const api = onRequest({ region: 'asia-northeast1' }, app)
+export const api = onRequest(
+  {
+    region: 'asia-northeast1',
+    secrets: [TYPO_CHECK_API_KEY, REVENUECAT_WEBHOOK_AUTH],
+  },
+  app
+)

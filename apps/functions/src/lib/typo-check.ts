@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express'
 
+import { TYPO_CHECK_API_KEY } from './secrets'
+
 type OpenAIResponse = {
   choices: Array<{
     message: {
@@ -97,8 +99,8 @@ const SYSTEM_PROMPT = `あなたは入力フォーム（メールアドレス、
 }`
 
 export async function handleTypoCheck(req: Request, res: Response) {
-  const TYPO_CHECK_API_KEY = process.env.TYPO_CHECK_API_KEY
-  if (!TYPO_CHECK_API_KEY) {
+  const apiKey = TYPO_CHECK_API_KEY.value()
+  if (!apiKey) {
     console.error('TYPO_CHECK_API_KEY is not set')
     res.status(500).json({ ok: false, error: 'Server configuration error' })
     return
@@ -133,7 +135,7 @@ export async function handleTypoCheck(req: Request, res: Response) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${TYPO_CHECK_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
