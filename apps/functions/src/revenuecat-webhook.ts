@@ -2,6 +2,8 @@ import crypto from 'crypto'
 import { type Request, type Response } from 'express'
 import { getFirestore } from 'firebase-admin/firestore'
 
+import { REVENUECAT_WEBHOOK_AUTH } from './lib/secrets'
+
 type WebhookEvent = {
   event: {
     type: string
@@ -31,7 +33,7 @@ export async function handleRevenueCatWebhook(
   req: Request,
   res: Response
 ): Promise<void> {
-  const expected = process.env.REVENUECAT_WEBHOOK_AUTH
+  const expected = REVENUECAT_WEBHOOK_AUTH.value()
   if (!expected) {
     console.error('REVENUECAT_WEBHOOK_AUTH not configured')
     res.status(500).json({ error: 'Webhook auth not configured' })

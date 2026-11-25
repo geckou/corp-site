@@ -2,25 +2,45 @@
 set -e
 
 # 使い方: bash scripts/deploy.sh [develop|staging|production] [--only functions|hosting]
+#
+# **派生プロジェクトがこのファイルを書き換えるときも保つ約束**:
+#
+#   - `SKIP_CHECKS=1` でデプロイ前チェック（type-check / lint / test / build）を省略できること
+#
+# 同期される側がこれに依存している。`.github/workflows/deploy.yml` は同じチェックを
+# ワークフローの step で済ませたうえで `SKIP_CHECKS=1` を渡し（二重実行の回避）、
+# `scripts/test-env-distribution.sh` の [6] は node_modules の無い一時ツリーで
+# このスクリプトを回すため、省略できないとそこで止まる。
+#
+# **このファイル自体は Template Sync の対象**（テンプレート同梱の `.templatesyncignore` に
+# 載っていない）。
+# 書き換えた版を残したい派生プロジェクトは、自分の `.templatesyncignore` に
+# `scripts/deploy.sh` を足すこと（→ .claude/docs/git-workflow.md）。
 
 cd "$(dirname "$0")/.."
 
+# firebase はルート package.json に固定した firebase-tools（node_modules/.bin）を使う。
+# yarn deploy:* 経由なら yarn が PATH に入れるが、このスクリプトを直接呼ぶ経路
+# （ドキュメントの手順・deploy.yml）では入らないので、ここで明示的に通す（#381）。
+# 固定していない派生では node_modules/.bin/firebase が無く、従来どおり PATH 上の CLI に落ちる
+export PATH="$PWD/node_modules/.bin:$PATH"
+
 ENV=${1:-develop}
 DEPLOY_ONLY=""
+DEPLOY_ONLY_GIVEN=false
 
-if [ "$2" = "--only" ] && [ -n "$3" ]; then
-  DEPLOY_ONLY="$3"
+if [ "${2:-}" = "--only" ]; then
+  DEPLOY_ONLY_GIVEN=true
+  DEPLOY_ONLY="${3:-}"
 fi
 
-# 環境 → Hosting サイト ID
-SITE_MAP_production="geckou-llc"
-SITE_MAP_staging="stg-geckou-llc"
-SITE_MAP_develop="dev-geckou-llc"
-SITE_VAR="SITE_MAP_${ENV}"
-SITE_NAME="${!SITE_VAR}"
-
-if [ -z "$SITE_NAME" ]; then
-  echo "[error] 未知の環境: ${ENV}（develop|staging|production のいずれか）"
+# --only に空の値を渡されたら止める。値の有無だけで分岐すると、
+# 指定が無かったことになって既定のターゲット全部が配られる。
+# 「対象を絞ったつもりの指定が、最大の配布に反転する」のが一番危ない壊れ方（#357）
+if [ "$DEPLOY_ONLY_GIVEN" = true ] &&
+  [ -z "$(printf '%s' "$DEPLOY_ONLY" | tr -d '[:space:]')" ]; then
+  echo "[error] --only に空の値が渡されました"
+  echo "  → 対象を絞らずに配るなら --only ごと外してください"
   exit 1
 fi
 
@@ -37,12 +57,139 @@ fi
 echo "=== デプロイ: ${ENV} 環境 ==="
 echo ""
 
+# firebase.json が storage を宣言しているか。
+# 宣言がないプロジェクトで firebase deploy --only storage を実行すると
+# 対象が見つからず失敗するため、既定・明示指定の双方でここを見る
+storage_configured() {
+  node -e "process.exit(require('./firebase.json').storage ? 0 : 1)" 2>/dev/null
+}
+
+# デプロイ対象（カンマ区切り）に functions が含まれるか。
+# functions:api のような個別指定も含む
+includes_functions() {
+  case ",$1," in
+    (*,functions,* | *,functions:*) return 0 ;;
+    (*) return 1 ;;
+  esac
+}
+
+# functions を配るときに --force を付けるか。
+#   auto   （既定）非対話なら付ける / 対話端末なら付けず、削除を人に聞く
+#   always 常に付ける（削除の確認を飛ばす）
+#   never  常に付けない
+#
+# 未対応の値はエラーにする。黙って auto に落とすと、`never` のつもりで
+# `nerver` と書いた CI が非対話なので --force 付きで走り、確認なしに
+# 関数が削除されうる（#357 の指摘）
+FUNCTIONS_FORCE=${FUNCTIONS_FORCE:-auto}
+
+case "$FUNCTIONS_FORCE" in
+  (auto | always | never) ;;
+  (*)
+    echo "[error] FUNCTIONS_FORCE の値が不正です: ${FUNCTIONS_FORCE}"
+    echo "  → auto（既定） / always / never のいずれかを指定してください"
+    exit 1
+    ;;
+esac
+
+# デプロイ対象（カンマ区切り）。
+# CI は変更差分から必要なターゲットだけを渡してくる（.github/workflows/deploy.yml）
+#
+# **ここで決めるのは意図的。** 型チェック・ビルド・env の退避を全部走らせてから
+# 「配れるものがありません」で落ちると、数分ぶんが毎回無駄になる
+DEFAULT_TARGETS="hosting"
+# layer:firebase:start
+DEFAULT_TARGETS="firestore,${DEFAULT_TARGETS}"
+
+if storage_configured; then
+  DEFAULT_TARGETS="firestore,storage,hosting"
+fi
+# layer:firebase:end
+# layer:functions:start
+DEFAULT_TARGETS="functions,${DEFAULT_TARGETS}"
+# layer:functions:end
+
+# 既定のターゲットは .firebaserc の構成から導出する。
+#
+# 1 つの Firebase プロジェクトに環境を相乗りさせる構成（→ .claude/docs/git-workflow.md）では
+# functions / firestore / storage が環境で分かれないため、既定のまま配ると
+# `deploy.sh develop` が本番の関数とルールを --force で上書きする（#358）。
+# 判定は scripts/lib/deploy-targets.mjs にあり、scripts/test-deploy-targets.sh が回帰テストする。
+#
+# --only での明示指定は止めない（他の環境にも配ることを警告するだけ）
+if [ -n "$DEPLOY_ONLY" ]; then
+  TARGETS=$(node scripts/lib/deploy-targets.mjs "$ENV" "$DEPLOY_ONLY" --explicit)
+else
+  TARGETS=$(node scripts/lib/deploy-targets.mjs "$ENV" "$DEFAULT_TARGETS")
+
+  # 絞り込みで全部落ちた（相乗り構成で、Hosting サイトも分けていない）。
+  # 「対象が空」と同じ文言で終えると --only の指定ミスに見えるので、ここで分ける
+  if [ -z "$TARGETS" ]; then
+    echo ""
+    echo "[error] この環境から既定で配れるものがありません（上の警告を参照）"
+    echo "  → hosting を配るには、この環境名の Hosting ターゲットを用意してください"
+    echo "     （.claude/docs/git-workflow.md「Hosting のターゲットは環境名に合わせる」）"
+    echo "  → functions / firestore / storage だけを配るなら --only で明示してください"
+    exit 1
+  fi
+fi
+
+# 退避先はリポジトリ内の決まった場所にする（.gitignore 済み）。
+#
+# **trap では取りこぼす。** 本物の Ctrl-C はフォアグラウンドのプロセスグループ全体に
+# SIGINT を送り、待機中の子が SIGINT で死ぬと bash 自身も SIGINT で終了するため、
+# EXIT / INT トラップのどちらも走らないまま終わることがある（実測）。
+# 退避した env は .gitignore の対象で git からも戻せないので、
+# 「次に deploy.sh を実行したとき、残骸があれば戻す」経路を別に用意する
+DEPLOY_STASH_DIR=.deploy-env-stash
+
+stash_path() {
+  printf '%s/%s' "${DEPLOY_STASH_DIR}" "$(printf '%s' "$1" | tr '/' '_')"
+}
+
+# 前回の中断で残った退避を戻してから始める。
+# 既にファイルが在る場合は触らない（use-env.sh が作り直した新しい値を、
+# 古い退避で上書きしないため）
+restore_stashed_env() {
+  [ -d "${DEPLOY_STASH_DIR}" ] || return 0
+
+  local stashed original restored
+  restored=0
+
+  for stashed in "${DEPLOY_STASH_DIR}"/*; do
+    [ -f "${stashed}" ] || continue
+
+    original="apps/web/$(basename "${stashed}" | sed 's/^apps_web_//')"
+
+    if [ ! -f "${original}" ]; then
+      cp "${stashed}" "${original}"
+      restored=$((restored + 1))
+    fi
+
+    rm -f "${stashed}"
+  done
+
+  rmdir "${DEPLOY_STASH_DIR}" 2>/dev/null || true
+
+  if [ "${restored}" -gt 0 ]; then
+    echo "[predeploy] 中断した前回のデプロイで退避した env を ${restored} 件戻しました"
+  fi
+}
+
+# 中断した前回のデプロイの退避が残っていれば戻す（use-env.sh が作り直す前に）
+restore_stashed_env
+
 # 環境の切り替え
 bash scripts/use-env.sh "${ENV}"
 echo ""
 
-# デプロイ前チェック（CI 環境では check ジョブで済んでいるのでスキップ）
-if [ "${CI:-}" != "true" ]; then
+# デプロイ前チェック。
+# CI では同じチェックをワークフロー側で実行済みなので SKIP_CHECKS=1 で省略する。
+# ローカル実行では既定で走る（環境変数を明示的に立てない限りスキップされない）
+if [ "${SKIP_CHECKS:-0}" = "1" ]; then
+  echo "[skip] SKIP_CHECKS=1 のためデプロイ前チェックを省略します（CI で実行済み）"
+  echo ""
+else
   echo "[check] 型チェック..."
   yarn type-check
 
@@ -54,101 +201,302 @@ if [ "${CI:-}" != "true" ]; then
 
   echo "[check] ビルド..."
   yarn build
-else
-  echo "[skip] CI 環境のためチェックをスキップ（check ジョブで実行済み）"
-  echo "[build] ビルド..."
-  yarn build
-fi
 
-echo ""
+  echo ""
+fi
 
 # workspace 依存を一時削除（Cloud Build が npm registry から取得しようとするのを防ぐ）
-BACKUP_DIR=$(mktemp -d)
-cp apps/web/package.json "${BACKUP_DIR}/web-package.json"
-cp apps/functions/package.json "${BACKUP_DIR}/functions-package.json"
+# git checkout での復元はユーザーの未コミット変更ごと破棄してしまうため、
+# バックアップコピーからの復元方式にする。
+# 対象は層構成によって変わるため、ここを唯一の一覧にする（layers.json 参照）
+WORKSPACE_PACKAGE_JSONS=(apps/web/package.json)
+# layer:functions:start
+WORKSPACE_PACKAGE_JSONS+=(apps/functions/package.json)
+# layer:functions:end
 
-cleanup_workspace_deps() {
-  echo "[cleanup] workspace 依存を復元中..."
-  cp "${BACKUP_DIR}/web-package.json" apps/web/package.json
-  cp "${BACKUP_DIR}/functions-package.json" apps/functions/package.json
-  rm -rf "${BACKUP_DIR}"
-  rm -f apps/web/.env.production
+backup_path() {
+  printf '%s/%s' "${BACKUP_DIR}" "$(printf '%s' "$1" | tr '/' '_')"
 }
-trap cleanup_workspace_deps EXIT
 
-# Cloud Build 用に NEXT_PUBLIC_* 変数を apps/web/.env.production へ書き出す
-# frameworksBackend は Cloud Build で再ビルドするため .env.local が使えない
-grep '^NEXT_PUBLIC_' ".env.${ENV}" > apps/web/.env.production 2>/dev/null || true
-if [ ! -s apps/web/.env.production ]; then
-  echo "[error] .env.${ENV} に NEXT_PUBLIC_* 変数がありません"
-  exit 1
-fi
-echo "[done] NEXT_PUBLIC_* → apps/web/.env.production"
+BACKUP_DIR=$(mktemp -d)
+
+for workspace_package in "${WORKSPACE_PACKAGE_JSONS[@]}"; do
+  cp "${workspace_package}" "$(backup_path "${workspace_package}")"
+done
+
+# デプロイ中だけ退避する env ファイル。
+#
+# framework-backed hosting は **apps/web/.env.* を丸ごと**関数のソースへ同梱する
+# （firebase-tools 15 の lib/frameworks/index.js が glob('.env.*') でコピーし、
+# lib/deploy/functions/prepareFunctionsUpload.js の既定 ignore は dotfile を外さない）。
+# apps/web/.env.local は .env.<環境名> の全文コピーなので、そのままだと
+# FIREBASE_SERVICE_ACCOUNT_KEY のようなサーバー秘密まで関数に載る（#329）。
+#
+# 退避するのは .env.local だけでなく **.env.* に一致するもの全部**。
+# .gitignore は .env.development.local / .env.production.local / .env.test.local も
+# 想定しており、アダプタはそれらも同じように同梱する。
+# apps/web/.env は残す（next build と SSR がこれを読む。中身は許可リストと
+# NEXT_PUBLIC_* だけで、scripts/use-env.sh が生成する）
+# 退避によって SSR 関数へ届かなくなる値を知らせる。
+#
+# これまでは apps/web/.env.local（.env.<環境名> の全文コピー）が関数へ同梱され、
+# Next.js が実行時に読んでいた。退避したあと SSR に届くのは apps/web/.env だけなので、
+# **許可リストに載せ忘れた値は例外もログも出さずに undefined になる。**
+# デプロイ済みの本番で初めて分かる壊れ方なので、ここで一覧を出す
+warn_env_not_reaching_ssr() {
+  local missing
+
+  # NEXT_PUBLIC_* は apps/web/.env が持つので除く。
+  # コメント行と空行も除く
+  missing=$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' ".env.${ENV}" | sed 's/=$//' |
+    grep -v '^NEXT_PUBLIC_' | sort -u |
+    while IFS= read -r key; do
+      grep -qE "^${key}=" apps/web/.env || printf '%s\n' "${key}"
+    done)
+
+  if [ -n "${missing}" ]; then
+    echo ""
+    echo "[note] 次の値は SSR 関数（middleware・Server Component）に届きません:"
+    printf '%s\n' "${missing}" | sed 's/^/  - /'
+    echo "  SSR で読むものがあれば scripts/use-env.sh の WEB_SSR_ENV_KEYS に足してください。"
+    echo "  Mobile / Functions 専用の値なら、このままで問題ありません。"
+    echo ""
+  fi
+}
+
+STASHED_ENV_FILES=()
+
+stash_local_env() {
+  local env_file
+
+  mkdir -p "${DEPLOY_STASH_DIR}"
+
+  for env_file in apps/web/.env.*; do
+    # グロブが 1 件も一致しないとパターン文字列がそのまま入る
+    [ -f "${env_file}" ] || continue
+
+    cp "${env_file}" "$(stash_path "${env_file}")"
+    rm -f "${env_file}"
+    STASHED_ENV_FILES+=("${env_file}")
+    echo "[predeploy] ${env_file} を退避しました（関数へ同梱させないため）"
+  done
+
+  if [ ${#STASHED_ENV_FILES[@]} -eq 0 ]; then
+    rmdir "${DEPLOY_STASH_DIR}" 2>/dev/null || true
+  else
+    warn_env_not_reaching_ssr
+    # 中断でトラップを取りこぼしても、次の yarn deploy:<環境名> が戻す。
+    # すぐ戻したいときは yarn env:<環境名> で作り直せる
+    echo "[predeploy] 退避先: ${DEPLOY_STASH_DIR}（中断しても次回のデプロイで戻します）"
+  fi
+}
+
+# 復元は 1 回だけ行う。INT / TERM でハンドラが走ったあと EXIT でも呼ばれるため
+CLEANUP_DONE=false
+
+cleanup_deploy_state() {
+  if [ "${CLEANUP_DONE}" = true ]; then
+    return 0
+  fi
+  CLEANUP_DONE=true
+
+  # **消えると復旧できないものから先に戻す。** workspace の package.json は
+  # git 管理下なので最悪 checkout で戻せるが、env ファイルは .gitignore の対象で
+  # 戻せない。この関数は set -e の下で走るため、途中で失敗すると以降は実行されない
+  local env_file
+  for env_file in ${STASHED_ENV_FILES[@]+"${STASHED_ENV_FILES[@]}"}; do
+    if [ -f "$(stash_path "${env_file}")" ]; then
+      cp "$(stash_path "${env_file}")" "${env_file}"
+      rm -f "$(stash_path "${env_file}")"
+    fi
+  done
+  rmdir "${DEPLOY_STASH_DIR}" 2>/dev/null || true
+
+  echo "[cleanup] workspace 依存を復元中..."
+  local workspace_package
+  for workspace_package in "${WORKSPACE_PACKAGE_JSONS[@]}"; do
+    cp "$(backup_path "${workspace_package}")" "${workspace_package}" || true
+  done
+
+  rm -rf "${BACKUP_DIR}"
+}
+
+# EXIT だけでは足りない。**本物の Ctrl-C** はフォアグラウンドのプロセスグループ全体に
+# SIGINT を送るため、EXIT トラップが走らないまま終わる。退避した env は .gitignore の
+# 対象で git からも戻せないので、シグナルでも必ず復元する
+# シグナルは「復元して**そこで終わる**」。復元だけして継続すると、CLEANUP_DONE により
+# 以降の EXIT トラップが無処理になったまま、退避を戻した状態で後続の
+# firebase deploy が走りうる（#357）
+trap cleanup_deploy_state EXIT
+trap 'cleanup_deploy_state; exit 130' INT
+trap 'cleanup_deploy_state; exit 143' TERM
+trap 'cleanup_deploy_state; exit 129' HUP
 
 echo "[predeploy] workspace 依存を一時削除..."
+# 削除するのは「このリポジトリのワークスペース」だけ。スコープ前置き（@geckou/）で
+# 判定すると、npm へ公開しているパッケージ（@geckou/ui-react / @geckou/billing /
+# @geckou/firebase-server 等）まで消え、registry から取り直せなくなる（#198）。
+# 実在する name の集合は scripts/lib/workspace-names.mjs が作る。
+# scripts/test-deploy-install.sh が同じものを使って、ここで作られる形を検査する
+#
+# 動的 import なので、失敗しても握り潰されないよう catch で明示的に落とす
 node -e "
   const fs = require('fs');
-  ['apps/web/package.json', 'apps/functions/package.json'].forEach(p => {
-    const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
-    for (const dep of Object.keys(pkg.dependencies || {})) {
-      if (dep.startsWith('@geckou/')) delete pkg.dependencies[dep];
-    }
-    fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
-  });
-"
+  const targets = process.argv.slice(1);
+
+  import('./scripts/lib/workspace-names.mjs')
+    .then(({ workspaceNames, withoutWorkspaceDependencies }) => {
+      const names = workspaceNames('.');
+
+      for (const target of targets) {
+        const pkg = JSON.parse(fs.readFileSync(target, 'utf8'));
+        pkg.dependencies = withoutWorkspaceDependencies(pkg.dependencies, names);
+        fs.writeFileSync(target, JSON.stringify(pkg, null, 2) + '\\n');
+      }
+    })
+    .catch((error) => {
+      console.error('[error] workspace 依存を落とせませんでした: ' + (error instanceof Error ? error.message : String(error)));
+      process.exit(1);
+    });
+" "${WORKSPACE_PACKAGE_JSONS[@]}"
+
+stash_local_env
 
 echo "[deploy] Firebase にデプロイ中..."
 
 # framework-backed hosting (firebase.json の frameworksBackend) に必要
 firebase experiments:enable webframeworks
 
-# 対象環境の Hosting ターゲットのみデプロイする。
-# frameworksBackend 構成では全ターゲットが同一 source を共有するため、
-# 全ターゲットをループすると意図しない環境にも本番ビルドが配られる。
-# ENV に対応するターゲット名（firebase.json の target / .firebaserc のマッピング名）を
-# 直指定して 1 ターゲットのみデプロイする。サイト ID（SITE_NAME）ではなく
-# ターゲット名を渡す点に注意（サイト ID では firebase が未検出となる）。
-# （複数の framework-backed ターゲットを 1 回の deploy に同梱すると
-#   Next アダプタが next build で停止するため、いずれにせよ単一指定が安全）
+# framework hosting ターゲットを 1 つずつデプロイする。
+# 複数の framework-backed Hosting ターゲットを 1 回の firebase deploy に
+# 同梱すると Next アダプタが next build で停止（ハング）するため。
+#
+# **配る先は今の環境のターゲットだけ。** 1 つの Firebase プロジェクトに develop /
+# staging / production の 3 サイトを相乗りさせる構成（→ .claude/docs/git-workflow.md）
+# では firebase.json に 3 ターゲットが並び、全部に配ると staging の .env でビルドした
+# ものが production のサイトにも出る（#323）。選び方は scripts/lib/hosting-targets.mjs
 deploy_hosting_per_target() {
-  echo "[deploy] hosting:${ENV} (${SITE_NAME})..."
-  firebase deploy --only "hosting:${ENV}" --force
+  local targets
+  targets=$(node scripts/lib/hosting-targets.mjs "$ENV")
+
+  if [ -z "$targets" ]; then
+    # hosting が単一・target/site 未設定（テンプレート既定）
+    firebase deploy --only hosting --force
+  else
+    for t in $targets; do
+      echo "[deploy] hosting:${t}..."
+      firebase deploy --only "hosting:${t}" --force
+    done
+  fi
 }
 
-case "$DEPLOY_ONLY" in
-  hosting)
-    deploy_hosting_per_target
-    ;;
-  "")
-    # 全体デプロイ: hosting 以外を先に、hosting はターゲットごとに
-    firebase deploy --only functions,firestore --force
-    deploy_hosting_per_target
-    ;;
-  *)
-    firebase deploy --only "$DEPLOY_ONLY" --force
-    ;;
-esac
 
-# SSR 関数の .env にアプリ環境変数をマージ（frameworksBackend が自動生成する .env に不足分を追記）
-SSR_ENV=".firebase/${SITE_NAME}/functions/.env"
+DEPLOY_HOSTING=false
+DEPLOY_STORAGE=false
+SKIPPED_TARGET=false
+HOSTING_TARGETS=()
+OTHER_TARGETS=""
 
-if [ -f "$SSR_ENV" ] && [ -f ".env.${ENV}" ]; then
-  PATCHED=false
-  while IFS= read -r line; do
-    [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
-    KEY="${line%%=*}"
-    [[ "$KEY" == NEXT_PUBLIC_* ]] && continue
-    grep -q "^${KEY}=" "$SSR_ENV" && continue
-    echo "$line" >> "$SSR_ENV"
-    echo "  [patch] + ${KEY}"
-    PATCHED=true
-  done < ".env.${ENV}"
+IFS=',' read -ra REQUESTED_TARGETS <<< "$TARGETS"
+for target in "${REQUESTED_TARGETS[@]}"; do
+  # 前後の空白を除去する（"functions, hosting" のような指定に備える）
+  target="${target#"${target%%[![:space:]]*}"}"
+  target="${target%"${target##*[![:space:]]}"}"
+  if [ -z "$target" ]; then
+    continue
+  fi
 
-  if [ "$PATCHED" = true ]; then
-    echo "[patch] SSR 関数の環境変数をパッチしました。再デプロイ中..."
-    deploy_hosting_per_target
+  case "$target" in
+    hosting)
+      # ターゲットの選択と個別デプロイは deploy_hosting_per_target が担当する
+      DEPLOY_HOSTING=true
+      ;;
+    hosting:*)
+      # hosting:<site> の個別指定。複数まとめて firebase へ渡すと
+      # deploy_hosting_per_target が回避しているハングの条件を満たすため、
+      # ここでも 1 ターゲットずつに分けて実行する
+      HOSTING_TARGETS+=("$target")
+      ;;
+    storage)
+      # Cloud Storage 未有効化時に失敗しうるため、他とまとめず個別に扱う。
+      # --only で明示指定された場合もここで firebase.json を確認する
+      # （CI は常に --only を渡すため、既定値側のガードだけでは素通りする）
+      if storage_configured; then
+        DEPLOY_STORAGE=true
+      else
+        echo "[skip] firebase.json に storage の宣言がないため Storage ルールのデプロイを省略します"
+        SKIPPED_TARGET=true
+      fi
+      ;;
+    *)
+      # functions:api のような個別指定はそのまま firebase へ渡す
+      OTHER_TARGETS="${OTHER_TARGETS:+${OTHER_TARGETS},}${target}"
+      ;;
+  esac
+done
+
+if [ -z "$OTHER_TARGETS" ] &&
+  [ "$DEPLOY_HOSTING" = false ] &&
+  [ "$DEPLOY_STORAGE" = false ] &&
+  [ ${#HOSTING_TARGETS[@]} -eq 0 ]; then
+  # 指定自体はあったが、この構成では対象外だったケース（storage 未宣言など）。
+  # 指定ミスとは区別して正常終了する
+  if [ "$SKIPPED_TARGET" = true ]; then
+    echo "[done] このプロジェクトでデプロイ対象になるものはありませんでした"
+    exit 0
+  fi
+
+  echo "[error] デプロイ対象が空です（--only の値を確認してください）"
+  exit 1
+fi
+
+if [ -n "$OTHER_TARGETS" ]; then
+  # --force は「ソースに無い関数を確認なしで削除する」を含む。hosting やルールでは
+  # 確認を飛ばすだけだが、functions では取り消せない削除になる（#357）。
+  # 対話端末から実行したときは付けず、削除の可否を人に聞く。
+  # 非対話（CI）はプロンプトに答えられずデプロイが止まるので付けたままにする
+  #
+  # 効かせるのは **functions を含むときだけ**。含まないのに外すと、ルールの
+  # デプロイから確認の飛ばしが消えるだけで、危険が減るわけではない
+  FORCE_FLAG=--force
+
+  if includes_functions "$OTHER_TARGETS"; then
+    case "$FUNCTIONS_FORCE" in
+      (always) ;;
+      (never) FORCE_FLAG= ;;
+      (*) if [ -t 0 ]; then FORCE_FLAG=; fi ;;
+    esac
+  fi
+
+  echo "[deploy] ${OTHER_TARGETS}..."
+  # FORCE_FLAG は空になりうるので、引用しない（空文字の引数を渡さないため）
+  # shellcheck disable=SC2086
+  firebase deploy --only "$OTHER_TARGETS" $FORCE_FLAG
+fi
+
+# Storage ルールは hosting より先に当てる。
+# ルールに依存するアプリを先に公開してしまわないためと、
+# 設定不備なら hosting の長いデプロイに入る前に落とすため
+if [ "$DEPLOY_STORAGE" = true ]; then
+  echo "[deploy] storage..."
+  if ! firebase deploy --only storage --force; then
+    echo ""
+    echo "[error] Storage ルールのデプロイに失敗しました"
+    echo "  Cloud Storage が有効化されていない可能性があります。"
+    echo "  - 使う場合: Firebase コンソールで Storage を有効化してください"
+    echo "  - 使わない場合: firebase.json の storage を削除してください"
+    exit 1
   fi
 fi
+
+if [ "$DEPLOY_HOSTING" = true ]; then
+  deploy_hosting_per_target
+fi
+
+for hosting_target in ${HOSTING_TARGETS[@]+"${HOSTING_TARGETS[@]}"}; do
+  echo "[deploy] ${hosting_target}..."
+  firebase deploy --only "$hosting_target" --force
+done
 
 echo ""
 echo "=== デプロイ完了: ${ENV} ==="
