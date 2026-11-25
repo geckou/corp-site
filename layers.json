@@ -212,7 +212,8 @@
         ".env.example",
         "apps/functions/.env.example",
         "scripts/use-env.sh",
-        "firestore.rules"
+        "firestore.rules",
+        "tests/firestore-rules.test.ts"
       ],
       "deps": {
         "apps/web/package.json": ["@revenuecat/purchases-js"],
