@@ -64,6 +64,11 @@
   - `TYPO_CHECK_API_KEY` / `REVENUECAT_WEBHOOK_AUTH` を Secret Manager（`defineSecret`）へ移し、
     `.env` から外した（親の use-env.sh には固有キーを足す口が無い）。`TYPO_CHECK_API_URL` は
     コードから参照されていなかったので削除
+- 挙動の変化: feat/fix 等の push で develop へ自動デプロイしなくなる（develop は `yarn deploy:develop` で手動）。
+  Functions・ルールは production だけが配る（相乗り構成）ため、stg/dev のフォームも本番の `api` を呼ぶなら
+  本番の `ALLOWED_ORIGINS` に stg/dev のオリジンを含める
+- `.templatesyncignore` の `firestore.rules` / `storage.rules` / `tests/` は親のベースどおり除外のまま。
+  中身は 37ba79b の親版で、親が変えても自動では追従しない（親のルールテストを更新したら手で取り込む）
 - マージ前に必要な作業（人）: PR 本文を参照
 
 ### Q-002 Firestore ルールのテストを持つか（→ Q-004 で置き換え）

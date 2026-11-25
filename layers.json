@@ -121,8 +121,7 @@
         "GOOGLE_APPLICATION_CREDENTIALS"
       ],
       "notes": [
-        "Storage は使っていない（storage.rules も firebase.json の storage 宣言も無い）。packages/shared/src/storage はクライアント側のヘルパーだけが残っている状態で、この層と一緒に外れる。",
-        "ルールテストは持たない方針（.claude/docs/questions.md Q-002）。テンプレートの firebase 層にある tests/ や scripts/test-rules.sh はここには無い。",
+        "Storage は使っていない（firebase.json に storage 宣言が無いのでデプロイされない）。storage.rules とそのテストは親テンプレートの版をそのまま持っている（.claude/docs/questions.md Q-004）。packages/shared/src/storage はクライアント側のヘルパーだけが残っている状態で、この層と一緒に外れる。",
         "apps/web と packages/shared のコードには層マーカーを入れていない。この層を外すときは files の削除に加えて、import の残りを手で追う必要がある。"
       ]
     },
