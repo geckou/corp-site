@@ -70,7 +70,7 @@
 - `.templatesyncignore` の `firestore.rules` / `storage.rules` / `tests/` は親のベースどおり除外のまま。
   中身は 37ba79b の親版で、親が変えても自動では追従しない（親のルールテストを更新したら手で取り込む）
 - `/contact-sample` の専用 Basic 認証（`CONTACT_TEST_AUTH`）は親版の use-env.sh では SSR に届かず、全環境で 404 になる。
-  テストページは使わないので 404 のままでよい（2026-11-25 回答）。コードを消すかは別途
+  テストページは使わないので削除する（2026-11-25 回答。hotfix の PR で削除）
 - マージ前に必要な作業（人）: PR 本文を参照
 
 ### Q-002 Firestore ルールのテストを持つか（→ Q-004 で置き換え）
