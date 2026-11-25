@@ -40,43 +40,8 @@ function evaluateBasicAuth(
 // 認証が必要なパス
 const PROTECTED_PATHS = ['/dashboard']
 
-// 専用 Basic 認証で保護するパス
-const PATH_BASIC_AUTH = [
-  { path: '/contact-sample', credentials: () => process.env.CONTACT_TEST_AUTH },
-]
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-
-  // パス専用 Basic 認証（サイト全体の Basic 認証とは独立）
-  const pathAuth = PATH_BASIC_AUTH.find(
-    (p) => pathname === p.path || pathname.startsWith(`${p.path}/`)
-  )
-
-  if (pathAuth) {
-    const credentials = pathAuth.credentials()
-
-    if (!credentials) {
-      return new NextResponse('Not Found', {
-        status: 404,
-        headers: { 'Cache-Control': NO_STORE_CACHE_CONTROL },
-      })
-    }
-
-    if (!matchBasicAuth(request, credentials)) {
-      return new NextResponse('Unauthorized', {
-        status: 401,
-        headers: {
-          'WWW-Authenticate': `Basic realm="${pathAuth.path}"`,
-          'Cache-Control': NO_STORE_CACHE_CONTROL,
-        },
-      })
-    }
-
-    const response = NextResponse.next()
-    response.headers.set('Cache-Control', NO_STORE_CACHE_CONTROL)
-    return response
-  }
 
   // サイト全体の Basic 認証（BASIC_AUTH_CREDENTIALS が設定されている環境のみ）
   const basicAuth = evaluateBasicAuth(
