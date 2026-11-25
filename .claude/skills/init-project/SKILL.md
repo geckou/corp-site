@@ -38,6 +38,9 @@ yarn setup
 ```
 
 - `.firebaserc` のプレースホルダ（`your-project-develop` 等）を実際の Firebase プロジェクト ID に置換
+  （**環境ごとにプロジェクトを分けるか、1 つのプロジェクトに相乗りさせるかを対話で選ぶ。**
+  判断材料は `.claude/docs/git-workflow.md`「Firebase プロジェクトの持ち方は2通りある」。
+  規模に対して 3 プロジェクトが過剰なら相乗り構成を勧め、選んだ構成を `spec.md` に残す）
 - `.env.develop` / `.env.staging` / `.env.production` / `.env.local` を `.env.example` から作成
 - Node.js / yarn / Firebase CLI のチェック、依存インストール
 - ブランチ保護ルールの取り込み（`production` と、`release/*` / `hotfix/*`。どちらも取り込むか対話で聞かれる）
@@ -98,15 +101,24 @@ rm -f .github/workflows/publish.yml .github/workflows/layer-matrix.yml \
   .github/workflows/smoke-test.yml .github/workflows/release-tag.yml
 rm -f scripts/release.sh scripts/geckou-release scripts/install-release-command.sh \
   scripts/test-release-command.sh scripts/check-api-diff.mjs scripts/test-api-diff.sh \
-  scripts/check-workspace-ranges.mjs scripts/test-workspace-ranges.sh
+  scripts/check-workspace-ranges.mjs scripts/test-workspace-ranges.sh \
+  scripts/adopt-references.mjs scripts/test-adopt-references.sh \
+  scripts/test-docs-downstream.sh scripts/test-module-formats.sh \
+  scripts/test-layers.sh
 ```
+
+この一覧は `.templatesyncignore` の `template-only:start` / `:end` の範囲と一致させる
+（`scripts/test-docs-downstream.sh` がテンプレート本体の CI で突き合わせる）。
 
 `ci.yml` の該当ステップは `hashFiles` で存在を見ているため、消しても CI は緑のまま通る。
 
 あわせて **`.claude/docs/hooks.md` の「本体保守で使うスクリプト」節を削除する。**
 このファイルは Template Sync の対象なので派生にも届くが、節が挙げているスクリプトは
-上で消したものを含み、残すと `yarn check:docs` が参照切れとして検出する
-（節ごと消せば検出されない。テンプレート更新で節が戻ってきたら、また消す）。
+上で消したものを含み、残すと存在しないスクリプトの説明になる。
+**消し忘れても `yarn check:docs` は検出しない** — `template-only` に載っていて実在しない
+パスへの言及は「派生には無いだけ」として見逃す作りのため（`scripts/check-docs.sh` の
+`is_template_only`）。CI では気付けないので、ここで消す（テンプレート更新で節が戻ってきたら、
+また消す）。
 
 ### 4. `@geckou/*` スコープの一括リネーム
 
@@ -130,10 +142,8 @@ rm -f scripts/release.sh scripts/geckou-release scripts/install-release-command.
   scripts の `turbo dev --filter=@geckou/web...` 等
 - 全ソースコードの import 文（`@geckou/shared`, `@geckou/shared/stores` 等）
 - `apps/*/tailwind.config.{ts,js}` の `@geckou/shared/theme` 参照
-- `scripts/setup.sh` 内の `yarn workspace @geckou/shared build`
 - `apps/functions/tsconfig.json` の paths（`@geckou/shared` エイリアス）
-- `apps/web/next.config.ts` / `apps/mobile/metro.config.js` / `firebase.json` /
-  `lint-staged.config.cjs` 内の参照
+- `apps/web/next.config.ts` / `apps/mobile/metro.config.js` / `firebase.json` 内の参照
 - `.claude/skills/` / `.claude/docs/` / `README.md` 内のコード例
 
 一括置換（macOS の BSD sed。Linux では `sed -i ''` を `sed -i` にする）:

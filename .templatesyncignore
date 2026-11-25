@@ -1,26 +1,26 @@
-# Template Sync の対象外（このプロジェクト固有にカスタマイズするファイル）。
-# ここに載っていないファイル（.claude/hooks/, .claude/skills/, .github/workflows/,
-# scripts/, ルート設定等）がテンプレート更新の取り込み対象になる。
+# Template Sync の対象外（派生プロジェクト固有にカスタマイズするファイル）
+# ここに載っていないファイル（.claude/skills/, .github/workflows/, ルート設定等）が
+# テンプレート更新の取り込み対象になる。
 #
-# ベースはテンプレート（geckou/project-starter）の .templatesyncignore。
-# 末尾の「このプロジェクト固有の除外」だけが corp-site の追加分。
+# この一覧は scripts/check-docs.sh も読む。同期されるドキュメントがここに載っている
+# パスを指していても、派生では参照切れに数えない（同期では埋めようがないため）。
+# つまりここへの追加は「そのパスへの言及を派生で検査しなくなる」効果も持つ。
 
-# 全部入りの構成を前提に書かれたドキュメントのうち、このリポジトリが自分の版を持つもの。
-# 参照切れは geckou/project-starter#338 で直ったので、それが理由の除外は外した。
-# 残しているのは中身をこのプロジェクト向けに書き換えているため（取り込むと上書きされる）
-#
-#   architecture.md: RevenueCat だけ・Stripe 無しの構成に絞り、マルチサイトデプロイを足してある
-#   workflow.md: 企画書・仕様書・ロードマップの参照先を Notion に差し替えてある
-.claude/docs/architecture.md
-.claude/docs/workflow.md
-
-# プロダクト固有ドキュメント（企画書・仕様書・ロードマップは Notion で管理）
+# プロダクト固有ドキュメント
 .claude/docs/questions.md
 .claude/docs/planning.md
 .claude/docs/spec.md
 .claude/docs/roadmap.md
+.claude/docs/roadmap-archive.md
 CLAUDE.md
 README.md
+
+# ルールのテスト（派生プロジェクトは自分のルールに対して書く）。
+# firestore.rules / storage.rules 自体が同期対象外なのに、それを検証する
+# テストだけが配られると、届いた瞬間に ci.yml のルールテストが有効になり
+# （判定は tests/*rules*.test.ts の有無）、テンプレート前提の assertion で
+# 必ず落ちる（#350）
+tests/
 
 # 環境・Firebase 設定（プロジェクトごとに異なる）
 .env*
@@ -38,24 +38,27 @@ packages/
 package.json
 yarn.lock
 
-# フックのスタック依存設定（自分のスタックに合わせて書き換える）
+# フックのスタック依存設定（派生プロジェクトが自分のスタックに合わせて書き換える）
 .claude/hooks/config.sh
 
-# 層マニフェスト（どの層を採用しているかはプロジェクトごとに違う）
+# 層マニフェスト（どの層を採用しているかは派生プロジェクトごとに違う）
 layers.json
 
-# ここから下は「テンプレート本体にしか存在しないファイル」。上の除外（このリポジトリが
-# 自分の版を持つファイル）とは種類が違うので、マーカーで囲んで機械的に区別できるようにする。
+# ここから下は「テンプレート本体にしか存在しないファイル」。上の除外（派生が自分の
+# 版を持つファイル）とは種類が違うので、マーカーで囲んで機械的に区別できるようにする。
 # scripts/check-docs.sh がこの範囲を読み、同期されるドキュメントがこれらを参照していても
-# 参照切れにしない（テンプレート本体では実在するので通常どおり検査される）。
+# 派生では参照切れにしない（テンプレート本体では実在するので通常どおり検査される）。
 # template-only:start
 
-# テンプレート本体だけが持つワークフロー
+# テンプレート本体だけが持つワークフロー（派生プロジェクトでは
+# `if: github.repository == 'geckou/project-starter'` で起動しない）。
+# /init-project が削除を案内するので、同期で戻さない
 .github/workflows/layer-matrix.yml
 .github/workflows/smoke-test.yml
 .github/workflows/release-tag.yml
 
-# パッケージ公開の導線（テンプレート本体だけが持つ）
+# パッケージ公開の導線（テンプレート本体だけが持つ。派生プロジェクトは公開しない）。
+# ci.yml がこれらの回帰テストを実行するため、一部だけ配ると派生の CI が落ちる
 .github/workflows/publish.yml
 scripts/release.sh
 scripts/geckou-release
@@ -68,42 +71,40 @@ scripts/test-workspace-ranges.sh
 scripts/adopt-references.mjs
 scripts/test-adopt-references.sh
 
-# --- ここから corp-site 固有の除外 ---
+# 派生プロジェクトへ同期された状態を再現して docs-check を回す検査（テンプレート本体専用）
+scripts/test-docs-downstream.sh
 
-# CI はテンプレートを参照する形にしたため、実体で上書きされないようにする
-.github/workflows/ci.yml
+# 公開物の形式検査（check-module-formats.mjs）の回帰テスト。検査スクリプト本体は
+# 派生にも配る（ci.yml が直接呼ぶ）が、その振る舞いを固定するのは本体の CI の仕事
+scripts/test-module-formats.sh
 
-# 環境切り替え。FUNCTIONS_ENV_KEYS にこのプロジェクト固有のキー
-# （TYPO_CHECK_API_URL / TYPO_CHECK_API_KEY / REVENUECAT_WEBHOOK_AUTH）を持っており、
-# テンプレートの実体で上書きすると apps/functions/.env から消えて Functions が壊れる。
-# 実際に初回同期で消えた（→ geckou/project-starter#338）
-scripts/use-env.sh
-
-# デプロイ経路。Cloud Build 向けの NEXT_PUBLIC_* 書き出し・SSR 関数の .env パッチ・
-# 「ENV に対応する Hosting ターゲットだけを配る」対応がこのリポジトリ固有に入っている。
-# テンプレート側の実体で上書きすると全ターゲットへ配ってしまうため同期しない
-.github/workflows/deploy.yml
-scripts/deploy.sh
-
-# ローカル起動の設定（nvm 経由・autoPort。開発機の都合に合わせてある）
-.claude/launch.json
-
-# ルールテストの実体。このプロジェクトは Storage を使わず、firestore.rules も
-# テンプレート（課金層あり）とは別物なので、テンプレートのテストは同期しない
-tests/
-scripts/test-rules.sh
-firebase.rules-test.json
-
-# env 配布の回帰テスト。テンプレート版の scripts/deploy.sh を前提にしていて、
-# このリポジトリ固有の deploy.sh（Cloud Build 向けの書き出し等）とは噛み合わない
-# （`yarn build` が見つからず 3 件失敗する）。ci.yml は hashFiles で存在を見てから
-# 走らせるので、持たなければスキップされる。→ geckou/project-starter#338
-scripts/test-env-distribution.sh
-
-# 層スクリプトの回帰テスト。テンプレート本体のリポジトリの形（packages/*-config の実体、
-# renovate/*.json、全部入りの ci.yml、Stripe の env、apps/functions/src/lib/billing.ts 等）を
-# 前提に書かれており、派生プロジェクトでは通らない。層マニフェストの検証そのものは
-# scripts/check-layers.mjs が行うので、こちらは持たない（→ geckou/project-starter#326）
+# 減算・加算スクリプトの回帰テスト。アサーションが**テンプレート本体の形**
+# （全部入りの構成、renovate/*.json や packages/*-config の実体、ci.yml の中身）を
+# 直に見るため、参照方式の派生や層を外した構成では必ず落ちる。
+# 派生が持つ理由も薄い — 検証しているのは同期されてくるスクリプト自身の振る舞いで、
+# それはここ（本体）の CI が見る。派生側で層マニフェストと実態が合っているかは
+# check-layers.mjs が引き続き見る（#326）
 scripts/test-layers.sh
 
 # template-only:end
+
+# 取り込んだテンプレートの地点の記録（派生プロジェクトだけが持つ）。
+# template-sync.yml が同期 PR ごとに書き換えるので、同期で上書きしない。
+# ただしこの行が届くのは新しく scaffold した派生だけ（既存の派生は自分の
+# .templatesyncignore が同期のたびに復元される）。本体がこのファイルを
+# 持たない以上、届かなくても上書きは起きない
+.template-version
+
+# --- ここから corp-site 固有の除外 ---
+# 方針: スクリプト・ワークフロー・ルール類は親テンプレートの版に揃える。
+# ここに残すのは「中身がこのプロジェクト固有で、親の版を取り込むと情報が失われる」ものだけ
+
+# 企画書・仕様書・ロードマップの参照先を Notion に差し替え、RevenueCat だけの構成に絞ってある
+.claude/docs/architecture.md
+.claude/docs/workflow.md
+
+# CI はテンプレートの reusable workflow を参照する 1 行だけにしてある（packages/README.md）
+.github/workflows/ci.yml
+
+# ローカル起動の設定（開発機の都合に合わせてある）
+.claude/launch.json

@@ -62,7 +62,8 @@ app/<path>/
 | Web クライアント用 | `.env.local`（ルート） | `NEXT_PUBLIC_FIREBASE_*` |
 | Mobile 用 | `.env.local`（ルート） | `FIREBASE_*`（app.json の extra 経由） |
 | サーバー専用 | `.env.local`（ルート） | `FIREBASE_SERVICE_ACCOUNT_KEY` |
-| Functions 専用 | `apps/functions/.env` | `REVENUECAT_WEBHOOK_SECRET` |
+| Functions 専用 | `apps/functions/.env`（`scripts/use-env.sh` が生成） | `ALLOWED_ORIGINS` |
+| Functions の秘密 | Secret Manager（`firebase functions:secrets:set`） | `TYPO_CHECK_API_KEY` / `REVENUECAT_WEBHOOK_AUTH`（→ `apps/functions/src/lib/secrets.ts`） |
 
 `NEXT_PUBLIC_` プレフィックスはブラウザに露出する。サーバー用の値には絶対に付けない。
 

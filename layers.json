@@ -31,7 +31,17 @@
         "scripts/deploy.sh",
         "scripts/use-env.sh",
         "turbo.json",
-        "renovate.json5"
+        "renovate.json5",
+        "apps/web/.npmrc",
+        "scripts/lib/hosting-targets.mjs",
+        "scripts/lib/deploy-targets.mjs",
+        "scripts/lib/workspace-names.mjs",
+        "scripts/test-deploy-targets.sh",
+        "scripts/test-deploy-install.sh",
+        "scripts/emit-esm-package-json.sh",
+        "renovate/default.json",
+        "renovate/automerge.json",
+        "scripts/test-env-distribution.sh"
       ],
       "env": [
         "BASIC_AUTH_CREDENTIALS",
@@ -64,9 +74,17 @@
         "packages/shared/tests/firestore.test.ts",
         "packages/shared/tests/stores.test.ts",
         "firestore.rules",
-        "firestore.indexes.json"
+        "firestore.indexes.json",
+        "firebase.rules-test.json",
+        "scripts/test-rules.sh",
+        "storage.rules",
+        "tests"
       ],
-      "blocks": [".env.example"],
+      "blocks": [
+        ".env.example",
+        ".github/workflows/deploy.yml",
+        "scripts/deploy.sh"
+      ],
       "deps": {
         "package.json": ["firebase", "@firebase/rules-unit-testing"],
         "apps/web/package.json": ["firebase", "firebase-admin"],
@@ -88,7 +106,7 @@
       "replace": [
         {
           "file": ".claude/hooks/config.sh",
-          "find": "firestore.rules\tfirestore.rules が変更されました。ルールテストは持たない方針のため、yarn firebase:emulators で許可/拒否を手で確認してください。\n",
+          "find": "firestore.rules\tfirestore.rules が変更されました。yarn test:rules でルールテスト（許可/拒否）を実行してください。\n",
           "with": ""
         }
       ],
@@ -103,8 +121,7 @@
         "GOOGLE_APPLICATION_CREDENTIALS"
       ],
       "notes": [
-        "Storage は使っていない（storage.rules も firebase.json の storage 宣言も無い）。packages/shared/src/storage はクライアント側のヘルパーだけが残っている状態で、この層と一緒に外れる。",
-        "ルールテストは持たない方針（.claude/docs/questions.md Q-002）。テンプレートの firebase 層にある tests/ や scripts/test-rules.sh はここには無い。",
+        "Storage は使っていない（firebase.json に storage 宣言が無いのでデプロイされない）。storage.rules とそのテストは親テンプレートの版をそのまま持っている（.claude/docs/questions.md Q-004）。packages/shared/src/storage はクライアント側のヘルパーだけが残っている状態で、この層と一緒に外れる。",
         "apps/web と packages/shared のコードには層マーカーを入れていない。この層を外すときは files の削除に加えて、import の残りを手で追う必要がある。"
       ]
     },
@@ -118,7 +135,9 @@
       "blocks": [
         ".env.example",
         "scripts/use-env.sh",
-        "lint-staged.config.cjs"
+        "lint-staged.config.cjs",
+        ".github/workflows/deploy.yml",
+        "scripts/deploy.sh"
       ],
       "scripts": {
         "package.json": [
@@ -130,15 +149,8 @@
       "json": {
         "firebase.json": [["functions"], ["emulators", "functions"]]
       },
-      "env": [
-        "ALLOWED_ORIGINS",
-        "NEXT_PUBLIC_API_BASE_URL",
-        "SENTRY_DSN",
-        "TYPO_CHECK_API_URL",
-        "TYPO_CHECK_API_KEY"
-      ],
+      "env": ["ALLOWED_ORIGINS", "NEXT_PUBLIC_API_BASE_URL", "SENTRY_DSN"],
       "notes": [
-        ".github/workflows/deploy.yml と scripts/deploy.sh はこのリポジトリ固有の内容になっており、Template Sync の対象外（.templatesyncignore）。テンプレートのマニフェストと違ってマーカーを入れていないため、この層を外すときはデプロイ経路を手で直す必要がある。",
         "FCM 送信（apps/functions/src/lib/push-notifications.ts）はファイルとしてこの層にあるが、実利用は mobile 層が前提。"
       ]
     },
@@ -148,12 +160,18 @@
       "requires": "functions",
       "removable": true,
       "summary": "apps/mobile 一式と、それが持ち込む nohoist・Renovate preset の Expo ルール。現在このサイトでは使っておらず、scaffold のまま残している。",
-      "files": ["apps/mobile"],
+      "files": [
+        "apps/mobile",
+        "renovate/mobile.json",
+        ".github/workflows/mobile-release.yml"
+      ],
       "blocks": [
         ".env.example",
         "scripts/use-env.sh",
         "lint-staged.config.cjs",
-        "renovate.json5"
+        "renovate.json5",
+        ".claude/docs/git-workflow.md",
+        ".github/workflows/deploy.yml"
       ],
       "scripts": {
         "package.json": ["dev:mobile"]
@@ -186,12 +204,15 @@
         "apps/web/src/lib/revenuecat.ts",
         "apps/mobile/src/lib/revenuecat.ts",
         "apps/functions/src/revenuecat-webhook.ts",
-        "apps/functions/tests/revenuecat-webhook.test.ts"
+        "apps/functions/tests/revenuecat-webhook.test.ts",
+        ".claude/docs/billing.md"
       ],
       "blocks": [
         ".env.example",
         "apps/functions/.env.example",
-        "scripts/use-env.sh"
+        "scripts/use-env.sh",
+        "firestore.rules",
+        "tests/firestore-rules.test.ts"
       ],
       "deps": {
         "apps/web/package.json": ["@revenuecat/purchases-js"],
@@ -203,8 +224,7 @@
       "env": [
         "NEXT_PUBLIC_REVENUECAT_API_KEY",
         "REVENUECAT_API_KEY_APPLE",
-        "REVENUECAT_API_KEY_GOOGLE",
-        "REVENUECAT_WEBHOOK_AUTH"
+        "REVENUECAT_API_KEY_GOOGLE"
       ],
       "notes": [
         "この層を宣言しているのは、実際に RevenueCat の配線がリポジトリにあるため。宣言しないと scripts/sync-layers.mjs が Template Sync のたびにテンプレートの billing.files（apps/mobile/src/lib/revenuecat.ts 等）を削除対象と見なす。",

@@ -1,26 +1,102 @@
 name: Deploy
 
+# develop 環境は自動デプロイしない（複数人の feat/* push が互いに上書きし合うため）。
+# develop へは各自 `yarn deploy:develop` で手動デプロイする。
 on:
   push:
     branches:
       - production # → production 環境
       - 'release/**' # → staging 環境
       - 'hotfix/**' # → staging 環境
-      - 'feat/**' # → develop 環境
-      - 'fix/**' # → develop 環境
-      - 'refactor/**' # → develop 環境
-      - 'test/**' # → develop 環境
+    # アプリの動作に影響しない変更ではデプロイしない（Actions 分の節約）
+    paths-ignore:
+      - '**/*.md'
+      - '.claude/**'
+      - '.vscode/**'
+      - '.editorconfig'
+      - 'LICENSE'
+  # 差分判定をせず全ターゲットをデプロイする手動実行。
+  # 差分の基準は「前回デプロイに成功したコミット」なので、失敗した回や
+  # 取り消された回の変更は次の push で自動的に含まれる（→ Detect deploy targets）。
+  # それでも取りこぼしたときの回復手段として残している
+  workflow_dispatch:
+
+# 同一ブランチへの連続 push でデプロイが競合しないよう直列化する
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
+  # actions/* の実行ランタイムを Node 24 に固定（旧 Node ランタイム非推奨警告の抑制）
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# GITHUB_TOKEN は既定でこのワークフローの用途（チェックアウトと検査）に必要な
+# 読み取りだけに絞る。明記しないとリポジトリ既定の権限（permissive なら
+# contents: write）で動くため、install / build が実行する任意のコードに
+# 書き込み権限のトークンが渡る
+permissions:
+  contents: read
+  # Detect deploy targets が「前回デプロイに成功した run」を引くのに使う
+  actions: read
+
 jobs:
-  # チェック（常に実行）
-  check:
+  # チェックとデプロイを 1 ジョブにまとめている。
+  # 分けると actions/checkout + setup-node + yarn install が二重に走り、
+  # さらにジョブ単位の最低課金 1 分が余分にかかるため。
+  # 「チェックが失敗したらデプロイしない」保証は、step は前段が失敗すると
+  # 以降がスキップされるため、ジョブを分けなくても同等に満たされる。
+  #
+  # 注: 鍵そのものを job の env に置かない。job env は install / build /
+  # firebase-tools のインストールまで全ステップから読めるため、依存のどれかが
+  # 侵害されると本番の鍵がそのまま抜ける。鍵を参照するのは認証ステップだけにし、
+  # 有無の判定には値を含まない boolean（HAS_SERVICE_ACCOUNT）を使う
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # ブランチからデプロイ先の環境を決定し、シークレットの有無を判定
+      - name: Set environment
+        id: env
+        # ブランチ名には $ や ` 等のメタ文字を含められるため、${{ }} をスクリプトへ
+        # 直接展開せず env 経由のクォート付き変数として参照する（シェル注入対策）
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          # 鍵の中身ではなく「設定されているか」だけを渡す（true / false の文字列）
+          HAS_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: |
+          REF="$REF_NAME"
+          ENV_NAME=""
+          if [ "$REF" = "production" ]; then
+            ENV_NAME="production"
+          elif [[ "$REF" == release/*/* ]]; then
+            # アプリ単独のリリース（release/<アプリ>/<バージョン>）は既定では配らない。
+            # production を土台に全ターゲットを staging へ配ると、同時に QA 中の
+            # 全体のリリースを古い版で上書きし、そちらの次のデプロイでも戻らない
+            # （差分の基準がブランチごとのため）。配るなら派生側で設定する
+            # （.claude/docs/git-workflow.md「アプリ単独のリリース」）
+            echo "::notice::${REF} はアプリ単独のリリースのため、既定ではデプロイしません"
+          elif [[ "$REF" == release/* ]] || [[ "$REF" == hotfix/* ]]; then
+            ENV_NAME="staging"
+          fi
+          echo "name=$ENV_NAME" >> $GITHUB_OUTPUT
+
+          # 環境が決まらないブランチ（workflow_dispatch を feat/* 等で実行した場合）では
+          # デプロイしない。ここで止めないと deploy.sh の既定値 develop へ流れてしまう
+          if [ -z "$ENV_NAME" ]; then
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "::warning::${REF} はデプロイ対象のブランチではないため、チェックのみ実行します"
+          elif [ "$HAS_SERVICE_ACCOUNT" = "true" ]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "FIREBASE_SERVICE_ACCOUNT が未設定のためデプロイをスキップします"
+          fi
+
       - uses: actions/checkout@v7
+        with:
+          # デプロイ対象を変更差分から判定するため、前回デプロイに成功した
+          # コミットまで遡れる履歴が要る（間隔が空くと浅い clone では届かない）
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -28,6 +104,28 @@ jobs:
           cache: 'yarn'
 
       - run: yarn install --frozen-lockfile
+
+      # layer:mobile:start
+      # ワークスペース名は /init-project でリネームされるため、実行時に読む
+      # （ci.yml / smoke-test.yml と同じ）。
+      # mobile 層を外した派生（apps/mobile ごと削除）でもデプロイが落ちないよう、
+      # 層マニフェストではなく実ファイルの有無で判定する（ci.yml と同じ方針）
+      - name: Generate Expo type declarations
+        if: hashFiles('apps/mobile/package.json') != ''
+        run: |
+          yarn workspace "$(node -p "require('./apps/mobile/package.json').name")" \
+            exec expo customize tsconfig.json
+      # layer:mobile:end
+      # turbo のローカルキャッシュを実行間で持ち越し、変更のないパッケージの
+      # 再ビルドを避ける。build の inputs に .env* が含まれているため、
+      # 環境ごとの差はキャッシュキー側で分かれる（turbo.json 参照）
+      - name: Restore Turborepo cache
+        uses: actions/cache@v6
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
 
       - name: Type Check
         run: yarn type-check
@@ -35,96 +133,271 @@ jobs:
       - name: Lint
         run: yarn lint
 
+      # yarn format:check ではなくスクリプトを直接呼ぶ。
+      # ルート package.json は Template Sync の対象外なので、yarn 経由だと
+      # 派生プロジェクトでは古いコマンド（ビルド前の prettier）のまま実行されてしまう
       - name: Format Check
-        run: yarn format:check
+        run: bash scripts/format.sh --check
 
       - name: Test
         run: yarn test
 
+      # layer:firebase:start
+      # Firestore ルールテスト（turbo のタスクグラフ外なので明示的に実行する）
+      # エミュレーターの実行に Java が必要
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      # layer:firebase:end
+
+      # ルールテストとデプロイの両方で使う。
+      # メジャー更新でのデプロイ破壊を防ぐため、版はルート package.json で固定する
+      - name: Install Firebase CLI
+        run: |
+          # ルート package.json に固定した firebase-tools（#381）を使う。
+          # ルート package.json は Template Sync の対象外なので、固定していない派生では
+          # 従来どおりグローバルへ入れる（版はテンプレートの固定に合わせる）
+          if [ -x node_modules/.bin/firebase ]; then
+            echo "firebase-tools $(node_modules/.bin/firebase --version) を node_modules から使います"
+          else
+            echo "::notice::ルート package.json に firebase-tools が無いためグローバルにインストールします（yarn add -W -D firebase-tools@^15 で固定できます）"
+            npm install -g firebase-tools@15
+          fi
+
+      # layer:firebase:start
+      # yarn test:rules ではなくスクリプトを直接呼ぶ。
+      # ルート package.json は Template Sync の対象外なので、yarn 経由だと
+      # 派生プロジェクトでは古いコマンド（firestore のみ）のまま実行されてしまう
+      - name: Firestore / Storage Rules Test
+        run: bash scripts/test-rules.sh
+      # layer:firebase:end
+
+      # ここでビルドが通ることを確認する。デプロイ時の成果物は
+      # firebase deploy 側（functions の predeploy / hosting のフレームワークアダプタ）が
+      # env 込みで別途ビルドするため、ここでは検証としてのみ実行する
       - name: Build
         run: yarn build
 
-  # デプロイ（FIREBASE_SERVICE_ACCOUNT または FIREBASE_TOKEN が設定されている場合のみ）
-  deploy:
-    runs-on: ubuntu-latest
-    needs: check
-    env:
-      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-      FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-
-    steps:
-      # ブランチからデプロイ先の環境を決定し、シークレットの有無を判定
-      - name: Set environment
-        id: env
-        run: |
-          # name: .env.<環境名> や deploy.sh に渡す環境名（小文字）
-          # env_secret: .env の中身を保持するシークレット名（大文字）
-          REF="${{ github.ref_name }}"
-          if [ "$REF" = "production" ]; then
-            echo "name=production" >> $GITHUB_OUTPUT
-            echo "env_secret=ENV_PRODUCTION" >> $GITHUB_OUTPUT
-          elif [[ "$REF" == release/* ]] || [[ "$REF" == hotfix/* ]]; then
-            echo "name=staging" >> $GITHUB_OUTPUT
-            echo "env_secret=ENV_STAGING" >> $GITHUB_OUTPUT
-          else
-            echo "name=develop" >> $GITHUB_OUTPUT
-            echo "env_secret=ENV_DEVELOP" >> $GITHUB_OUTPUT
-          fi
-
-          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
-            echo "auth=service-account" >> $GITHUB_OUTPUT
-            echo "deploy=true" >> $GITHUB_OUTPUT
-          elif [ -n "$FIREBASE_TOKEN" ]; then
-            echo "auth=token" >> $GITHUB_OUTPUT
-            echo "deploy=true" >> $GITHUB_OUTPUT
-          else
-            echo "deploy=false" >> $GITHUB_OUTPUT
-            echo "FIREBASE_SERVICE_ACCOUNT / FIREBASE_TOKEN が未設定のためデプロイをスキップします"
-          fi
-
-      - uses: actions/checkout@v7
-        if: steps.env.outputs.deploy == 'true'
-
-      - uses: actions/setup-node@v7
-        if: steps.env.outputs.deploy == 'true'
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'yarn'
-
-      - run: yarn install --frozen-lockfile
-        if: steps.env.outputs.deploy == 'true'
-
-      # 環境別の .env をシークレットから生成
-      # シークレット名: ENV_DEVELOP / ENV_STAGING / ENV_PRODUCTION
-      - name: Create .env.${{ steps.env.outputs.name }}
+      # 変更のあった箇所に対応するターゲットだけをデプロイする。
+      # functions は無変更でもコンテナを再ビルドするため数分かかり、
+      # web だけ触った push でその時間がまるごと無駄になっていた
+      #
+      # 差分の基準は **前回デプロイに成功したコミット**。push イベントの
+      # `before`（その push 1 回分の範囲）を使うと、次の 2 つで取りこぼす（#297）。
+      #
+      #   - concurrency は pending の run を 1 つしか保持しない。A の実行中に B が
+      #     pending のまま C が push されると B は取り消され、C は B の head からしか
+      #     diff しないので B の変更がどの run にも入らない
+      #   - チェックで落ちた回の変更も、次の push の diff に含まれない
+      #
+      # 前回成功した run の head から見れば、その間に積まれた変更は全て入る。
+      - name: Detect deploy targets
+        id: targets
         if: steps.env.outputs.deploy == 'true'
         env:
-          ENV_FILE: ${{ secrets[steps.env.outputs.env_secret] }}
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+          HEAD_SHA: ${{ github.sha }}
+          DEPLOY_ENV: ${{ steps.env.outputs.name }}
         run: |
-          if [ -z "$ENV_FILE" ]; then
-            echo "[error] シークレット ${{ steps.env.outputs.env_secret }} が未設定です"
-            exit 1
+          # 1 つの Firebase プロジェクトに環境を相乗りさせる構成では、
+          # functions / firestore / storage が環境で分かれない（#358）。
+          # CI の自動デプロイでそれらを配ってよいのは、そのプロジェクトを共有する
+          # 環境のうち最も本番側の 1 つだけ。判定は deploy.sh と同じものを使う
+          # 結果は FILTERED_TARGETS に置く。コマンド置換で受けると ::warning:: まで
+          # 取り込まれてしまい、Actions のアノテーションにならない
+          FILTERED_TARGETS=""
+          filter_targets() {
+            FILTERED_TARGETS=$(node scripts/lib/deploy-targets.mjs "$DEPLOY_ENV" "$1")
+
+            if [ "$FILTERED_TARGETS" != "$1" ]; then
+              echo "::warning::相乗り構成のため、このデプロイから除外したターゲットがあります（${1} → ${FILTERED_TARGETS:-なし}）。詳細は上のログを参照"
+            fi
+          }
+
+          ALL="hosting"
+          # layer:firebase:start
+          ALL="firestore,storage,${ALL}"
+          # layer:firebase:end
+          # layer:functions:start
+          ALL="functions,${ALL}"
+          # layer:functions:end
+
+          # 「run が成功した」だけでは基準にできない。deploy=false（シークレット
+          # 未設定・対象外ブランチ）や targets が空の run も success になり、
+          # Deploy to Firebase は skipped で終わる。それを基準にすると、後から
+          # シークレットを足した場合などに一度もデプロイしていない変更が
+          # 差分から抜ける。Deploy to Firebase が success だった run に限る。
+          #
+          # 逆に「targets が空だったので skipped」の run を飛ばすのは安全側。
+          # 基準が古くなって差分が広がるだけで、取りこぼしにはならない
+          DEPLOY_STEP='Deploy to Firebase'
+          FOUND_SUCCESS_RUN=false
+          BASE=""
+
+          # 実行中の run（自分自身）は success ではないので、ここには出てこない
+          RUNS=$(gh run list --workflow deploy.yml --branch "$BRANCH" --status success \
+            --limit 20 --json databaseId,headSha \
+            --jq '.[] | "\(.databaseId) \(.headSha)"' 2>/dev/null || true)
+
+          while read -r RUN_ID SHA; do
+            [ -z "$RUN_ID" ] && continue
+            FOUND_SUCCESS_RUN=true
+            DEPLOYED=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs" \
+              --jq "[.jobs[].steps[]? |
+                select(.name == \"${DEPLOY_STEP}\" and .conclusion == \"success\")] | length" \
+              2>/dev/null || echo 0)
+            if [ "${DEPLOYED:-0}" -gt 0 ]; then
+              BASE="$SHA"
+              break
+            fi
+          done <<EOF
+          $RUNS
+          EOF
+
+          # 初回のデプロイ、履歴に無いコミット、API を引けなかった場合。
+          # 判定できないときは絞らずに全部デプロイする（取りこぼしを作らないため）
+          if [ -z "$BASE" ] || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            if [ "$FOUND_SUCCESS_RUN" = true ] && [ -z "$BASE" ]; then
+              # ステップ名を変えると常にここへ落ちる（全部デプロイするので
+              # 壊れはしないが、差分判定が効かなくなるので気付けるようにする）
+              echo "::warning::成功した run はあるが '${DEPLOY_STEP}' が success の run が見つかりません"
+            fi
+            echo "前回デプロイに成功したコミットが特定できないため、全ターゲットをデプロイします"
+            filter_targets "$ALL"
+            ALL="$FILTERED_TARGETS"
+
+            if [ -z "$ALL" ]; then
+              echo "この環境から配るものはありません（相乗り構成の絞り込みで全て除外されました）"
+            fi
+
+            echo "targets=$ALL" >> $GITHUB_OUTPUT
+            exit 0
           fi
 
-          printf '%s\n' "$ENV_FILE" > .env.${{ steps.env.outputs.name }}
+          echo "前回デプロイに成功したコミット: $BASE"
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD_SHA")
+          echo "変更ファイル:"
+          echo "$CHANGED" | sed 's/^/  /'
 
-      # サービスアカウントで認証（推奨）
-      - name: Authenticate with Service Account
-        if: steps.env.outputs.deploy == 'true' && steps.env.outputs.auth == 'service-account'
+          NEED_HOSTING=false
+          # layer:functions:start
+          NEED_FUNCTIONS=false
+          # layer:functions:end
+          # layer:firebase:start
+          NEED_FIRESTORE=false
+          NEED_STORAGE=false
+          # layer:firebase:end
+          # 影響範囲を特定できないファイル（ルート設定・packages/ 等）が
+          # 含まれていたら、絞らずに全部デプロイする
+          GLOBAL=false
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              apps/web/*) NEED_HOSTING=true ;;
+              # layer:functions:start
+              apps/functions/*) NEED_FUNCTIONS=true ;;
+              # layer:functions:end
+              # layer:mobile:start
+              # Mobile は Firebase のデプロイ対象ではない（EAS 経由で配信する）
+              apps/mobile/*) ;;
+              # layer:mobile:end
+              # layer:firebase:start
+              firestore.rules | firestore.indexes.json) NEED_FIRESTORE=true ;;
+              storage.rules) NEED_STORAGE=true ;;
+              # layer:firebase:end
+              .github/* | .claude/* | .vscode/*) ;;
+              *.md | LICENSE | .editorconfig) ;;
+              *) GLOBAL=true ;;
+            esac
+          done <<EOF
+          $CHANGED
+          EOF
+
+          if [ "$GLOBAL" = true ]; then
+            NEED_HOSTING=true
+            # layer:functions:start
+            NEED_FUNCTIONS=true
+            # layer:functions:end
+            # layer:firebase:start
+            # firestore.rules / storage.rules 自体が変わっていなくても、
+            # firebase.json の設定（rules / indexes の参照先）や .firebaserc の
+            # 変更でデプロイ内容が変わりうるため、ルール系も対象にする
+            NEED_FIRESTORE=true
+            NEED_STORAGE=true
+            # layer:firebase:end
+          fi
+
+          TARGETS=""
+          # layer:functions:start
+          if [ "$NEED_FUNCTIONS" = true ]; then TARGETS="${TARGETS},functions"; fi
+          # layer:functions:end
+          # layer:firebase:start
+          if [ "$NEED_FIRESTORE" = true ]; then TARGETS="${TARGETS},firestore"; fi
+          if [ "$NEED_STORAGE" = true ]; then TARGETS="${TARGETS},storage"; fi
+          # layer:firebase:end
+          if [ "$NEED_HOSTING" = true ]; then TARGETS="${TARGETS},hosting"; fi
+          TARGETS="${TARGETS#,}"
+          REQUESTED_TARGETS="$TARGETS"
+          filter_targets "$TARGETS"
+          TARGETS="$FILTERED_TARGETS"
+
+          if [ -z "$TARGETS" ] && [ -n "$REQUESTED_TARGETS" ]; then
+            # 変更はあったが、相乗り構成の絞り込みで全て外れた。
+            # 「変更なし」と区別できるようにする
+            echo "この環境から配るものはありません（${REQUESTED_TARGETS} は相乗り構成の絞り込みで除外）"
+          elif [ -z "$TARGETS" ]; then
+            echo "デプロイが必要な変更はありません"
+          else
+            echo "デプロイ対象: $TARGETS"
+          fi
+          echo "targets=$TARGETS" >> $GITHUB_OUTPUT
+
+      # 環境別の .env をシークレットから生成
+      # （deploy.sh → use-env.sh が .env.local / apps/web/.env.local と、
+      #   SSR 関数が読む apps/web/.env・Functions が読む apps/functions/.env に配布する）
+      - name: Create .env.${{ steps.env.outputs.name }}
+        if: steps.env.outputs.deploy == 'true' && steps.targets.outputs.targets != ''
+        env:
+          # name は小文字（staging 等）だが、secrets コンテキストの参照は
+          # 大文字小文字を区別しないため ENV_FILE_STAGING 等に解決される
+          ENV_FILE: ${{ secrets[format('ENV_FILE_{0}', steps.env.outputs.name)] }}
+        # echo は -n 始まりの値や改行の扱いで内容が変わりうるため printf でそのまま書き出す
+        run: printf '%s\n' "$ENV_FILE" > .env.${{ steps.env.outputs.name }}
+
+      # サービスアカウントで認証（FIREBASE_TOKEN は firebase-tools v13+ で非推奨）
+      # 鍵のパスは GITHUB_ENV に書かない。書くと以降の**全ステップ**が引き継ぐため、
+      # 認証をビルドより後ろに置いて作った分離が無効になる（#351）。
+      # deploy の step に env で直接渡す（下）
+      - name: Authenticate to Firebase
+        if: steps.env.outputs.deploy == 'true' && steps.targets.outputs.targets != ''
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
+          # 先に空ファイルを 0600 で作る。リダイレクトだけだと umask 任せになり、
+          # 一般的な 022 では 0644 で作られる。self-hosted runner では同じホストの
+          # 別ユーザー・別ジョブからデプロイ中の鍵を読めてしまう
+          install -m 600 /dev/null "$RUNNER_TEMP/firebase-service-account.json"
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> $GITHUB_ENV
 
-      # FIREBASE_TOKEN で認証（レガシー、サービスアカウント移行まで）
-      - name: Authenticate with Token (legacy)
-        if: steps.env.outputs.deploy == 'true' && steps.env.outputs.auth == 'token'
-        run: echo "FIREBASE_TOKEN=$FIREBASE_TOKEN" >> $GITHUB_ENV
-
-      - name: Install Firebase CLI
-        if: steps.env.outputs.deploy == 'true'
-        run: npm install -g firebase-tools
-
-      # ローカルと同じ deploy.sh を使う
+      # ローカルと同じ deploy.sh を使う（workspace 依存の一時削除・
+      # hosting ターゲット個別デプロイなどの回避策を共有するため）。
+      # 型チェック・Lint・テスト・ビルドは上の step で実施済みなので
+      # SKIP_CHECKS で二重実行を防ぐ
       - name: Deploy to Firebase
-        if: steps.env.outputs.deploy == 'true'
-        run: bash scripts/deploy.sh ${{ steps.env.outputs.name }}
+        if: steps.env.outputs.deploy == 'true' && steps.targets.outputs.targets != ''
+        env:
+          SKIP_CHECKS: '1'
+          # 鍵を見せるのはこの step だけにする。firebase deploy が走らせる
+          # functions の predeploy（ワークスペースの build）は依然この中なので、
+          # 露出が消えるわけではない。無関係な step から外すのが目的
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: bash scripts/deploy.sh ${{ steps.env.outputs.name }} --only "${{ steps.targets.outputs.targets }}"
+
+      # 鍵ファイルは RUNNER_TEMP に残る。self-hosted runner では実行間で
+      # 残り続けるので、パスを絞ったうえで実体も消す
+      - name: Remove service account key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
