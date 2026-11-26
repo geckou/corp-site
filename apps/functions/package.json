@@ -20,18 +20,18 @@
   "dependencies": {
     "@geckou/shared": "*",
     "cors": "^2.8.5",
-    "express": "^4.21.0",
-    "firebase-admin": "^13.0.0",
-    "firebase-functions": "^6.0.0"
+    "express": "^5.0.0",
+    "firebase-admin": "^14.0.0",
+    "firebase-functions": "^7.0.0"
   },
   "devDependencies": {
     "@geckou/eslint-config": "^0.4.0",
     "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
+    "@types/express": "^5.0.0",
     "@types/node": "^24.19.2",
     "esbuild": "^0.28.0",
     "firebase-functions-test": "^3.3.0",
     "typescript": "^5.0.0",
-    "vitest": "^4.0.0"
+    "vitest": "^5.0.0"
   }
 }

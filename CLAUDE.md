@@ -9,7 +9,7 @@
 
 ## プロジェクト概要
 
-Turborepo モノレポ。Next.js 15 (Web) + Firebase（Auth / Firestore / Hosting）+ Cloud Functions。
+Turborepo モノレポ。Next.js 16 (Web) + Firebase（Auth / Firestore / Hosting）+ Cloud Functions。
 共有コードは `packages/shared` に集約。`apps/mobile`（Expo）は scaffold のまま残しているだけで、
 現在このサイトでは使っていない。
 

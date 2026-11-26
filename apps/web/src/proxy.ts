@@ -40,7 +40,7 @@ function evaluateBasicAuth(
 // 認証が必要なパス
 const PROTECTED_PATHS = ['/dashboard']
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // サイト全体の Basic 認証（BASIC_AUTH_CREDENTIALS が設定されている環境のみ）
