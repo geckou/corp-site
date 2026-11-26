@@ -11,7 +11,7 @@ Turborepo によるモノレポ構成で、1つのリポジトリから Web・�
 | カテゴリ     | 技術                                                         | 用途                                     |
 | ------------ | ------------------------------------------------------------ | ---------------------------------------- |
 | モノレポ管理 | Turborepo                                                    | ワークスペース間のビルド・キャッシュ管理 |
-| Web          | Next.js 15 (App Router)                                      | SSR 対応の Web アプリ                    |
+| Web          | Next.js 16 (App Router)                                      | SSR 対応の Web アプリ                    |
 | Mobile       | Expo SDK 52 (Expo Router)                                    | iOS / Android アプリ                     |
 | 言語         | TypeScript                                                   | 全パッケージ共通                         |
 | Backend      | Firebase (Auth / Firestore / Functions / Hosting)            | 認証・DB・API・ホスティング              |

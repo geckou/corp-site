@@ -20,14 +20,14 @@ Cloud Functions なら Web・Mobile・外部サービス（Webhook 等）全て�
 
 ```
 1. /login ページ（Client Component）で Firebase Auth のログイン
-2. middleware.ts でセッション Cookie をチェックしルート保護
+2. proxy.ts（Next.js 16 で middleware.ts から改名）でセッション Cookie をチェックしルート保護
 3. Server Component では firebase-admin でトークン検証
 4. クライアントでは onAuthStateChanged で認証状態を監視
 ```
 
 参考実装:
 - ログインページ: `apps/web/src/app/login/page.tsx`
-- ミドルウェア: `apps/web/src/middleware.ts`
+- プロキシ（旧ミドルウェア）: `apps/web/src/proxy.ts`
 
 ## データ取得パターン
 
