@@ -7,7 +7,7 @@
 
 | ディレクトリ | 説明                                                            | デプロイ先の例          |
 | ------------ | --------------------------------------------------------------- | ----------------------- |
-| `web/`       | Next.js 15 (App Router / SSR)。Tailwind CSS v4                  | Vercel / Cloud Run      |
+| `web/`       | Next.js 16 (App Router / SSR)。Tailwind CSS v4                  | Vercel / Cloud Run      |
 | `mobile/`    | Expo SDK 52 (iOS / Android)。NativeWind v4。不要なら削除可      | App Store / Google Play |
 | `functions/` | Firebase Cloud Functions (v2)。サーバーサイドのビジネスロジック | Firebase                |
 
